@@ -1,0 +1,10 @@
+# Ignore notebooks .ipynb
+notebooks/*.ipynb
+
+# Poetry virtualenv
+.venv
+
+# Outputs
+data
+images
+serialization
