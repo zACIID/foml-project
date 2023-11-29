@@ -1,5 +1,5 @@
 # Ignore notebooks .ipynb
-notebooks/*.ipynb
+*.ipynb
 
 # Poetry virtualenv
 .venv
