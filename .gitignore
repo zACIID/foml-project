@@ -8,7 +8,9 @@
 .venv
 
 # Outputs
-data
+data/*
 images
 serialization
-.idea
+
+# COCO download script
+!data/coco_download.sh
