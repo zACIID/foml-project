@@ -9,16 +9,6 @@ import utils.feat_engineering as fe
 from visualization.base import get_plotting_grid
 
 
-# TODO(pierluigi): metodi per:
-# 1. confusion matrix  TODO import da digit_recognition di assignment-2
-# 2. trasformazione immagine in k dimensioni a immagine in dimensioni originali
-#   - questo non so se è possibile perché PCA rende dati non-interpretabili
-# 3. Plot dell'immagine media:
-#   - in GMM (presa dalle medie delle k mixtures)
-#   - in MeanShift presa dai centri dei cluster (che in qualche modo rappr. media)
-#   -
-
-
 def feature_distributions_plot(
         data: pd.DataFrame,
         subplot_size: Tuple[float, float],

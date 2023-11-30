@@ -2,7 +2,7 @@
 name = "foml-project"
 version = "0.1.0"
 description = ""
-authors = ["zACIID <marchioropierluigi@gmail.com>"]
+authors = ["zACIID <marchioropierluigi@gmail.com>", "skippa1da2flippa <881423@stud.unive.it>"]
 readme = "README.md"
 packages = [
     { include = "src" }
