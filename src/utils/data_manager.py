@@ -25,23 +25,10 @@ class DataManager:
     def get_img(self, img_path: str) -> Tensor:
         return self._from_img_to_tensor(img_path)
 
-    def get_dataset_RAM_in(self) -> Tensor:
+    def get_dataset(self) -> Generator[Tensor, None, None]:
         images_ids: list[str] = os.listdir(self._dir_path)
-        images: Tensor = tensor([])
         for image_id in images_ids:
-            image: Tensor = self.get_img(image_id)
-            images = tensor_append(images, image, retain_dim=True)
-
-        return images
-
-    def get_dataset_RAM_out(self) -> list[Tensor]:
-        images_ids: list[str] = os.listdir(self._dir_path)
-        images: list[Tensor] = []
-        for image_id in images_ids:
-            image: Tensor = self.get_img(image_id)
-            images.append(image)
-
-        return images
+            yield self.get_img(image_id)
 
     """
         Worth to mention that each tensor was initialized with the flag requires_grad=False
