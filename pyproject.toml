@@ -22,6 +22,7 @@ plotly = "^5.16.1"
 kaleido = "0.2.1"
 datasets = "^2.14.6"
 torch = "^2.1.1"
+pycocotools = "^2.0.7"
 
 
 [build-system]
