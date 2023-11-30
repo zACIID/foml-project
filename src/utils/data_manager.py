@@ -43,3 +43,10 @@ class DataManager:
 
         return images
 
+    """
+        Worth to mention that each tensor was initialized with the flag requires_grad=False
+        this means that when we will pass this tensors to our models we need to set 
+        requires_grad=True otherwise the nets would not be able to learn. Thus for each tensor
+        representing an image (img) we just need to call the method img.requires_grad_()
+    """
+
