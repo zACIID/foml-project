@@ -2,7 +2,7 @@ import os
 from PIL import Image
 from numpy import array, ndarray
 from torch import tensor, Tensor
-from tensor_utility import tensorAppend
+from tensor_utility import tensor_append
 
 
 """
@@ -30,7 +30,7 @@ class DataManager:
         images: Tensor = tensor([])
         for image_id in images_ids:
             image: Tensor = self.get_img(image_id)
-            images = tensorAppend(images, image, retain_dim=True)
+            images = tensor_append(images, image, retain_dim=True)
 
         return images
 

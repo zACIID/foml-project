@@ -6,7 +6,7 @@ from torch import Tensor, tensor, cat
 """
 
 
-def tensorAppend(lst: Tensor, elem: Tensor, retain_dim: bool = False) -> Tensor:
+def tensor_append(lst: Tensor, elem: Tensor, retain_dim: bool = False) -> Tensor:
     if not lst.numel():
         return elem if not retain_dim else elem.unsqueeze(dim=0)
     else:
