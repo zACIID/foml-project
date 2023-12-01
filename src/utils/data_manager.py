@@ -3,6 +3,7 @@ from PIL import Image
 from numpy import array, ndarray
 from torch import tensor, Tensor
 from typing import Generator
+import type_utility as tu
 
 
 """
@@ -18,8 +19,8 @@ class DataManager:
 
     def _from_img_to_tensor(self, img_path: str) -> Tensor:
         total_path: str = os.path.join(self._dir_path, img_path)
-        with Image.open(total_path) as image:
-            data: ndarray[float] = array(image)
+        with Image.open(total_path) as img:
+            data: tu.image = array(img)
             return tensor(data)
 
     def get_img(self, img_path: str) -> Tensor:
@@ -29,6 +30,9 @@ class DataManager:
         images_ids: list[str] = os.listdir(self._dir_path)
         for image_id in images_ids:
             yield self.get_img(image_id)
+
+    def get_list_dataset(self) -> list[Tensor]:
+        return list(self.get_dataset())
 
     """
         Worth to mention that each tensor was initialized with the flag requires_grad=False
