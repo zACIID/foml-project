@@ -5,18 +5,6 @@ from src.classifiers.weak_learner import WeakLearner
 from src.classifiers.strong_learner import StrongLearner
 
 
-def getTheBestWeakLearner(weak_learners: ndarray[WeakLearner]) -> WeakLearner:
-    min_err: float = weak_learners[0].getErrorRate()
-    best_idx: int = 0
-    for idx, weak_learner in enumerate(weak_learners):
-        wl_error_rate: float = weak_learner.getErrorRate()
-        if wl_error_rate < min_err:
-            min_err = wl_error_rate
-            best_idx = idx
-
-    return weak_learners[best_idx]
-
-
 """
     Class wrapping all the functionalities needed to make a training algorithm based 
     on an ensemble approach
@@ -61,11 +49,15 @@ class AdaBoost:
 
         def detachedStart(weights: Tensor) -> StrongLearner:
             for era in range(self._n_eras):
+
                 # normalize the weights
                 AdaBoost.normalizeWeights(weights)
 
-                # find the weak learner with the lowest loss
-                best_weak_learner: WeakLearner = self._getBestWeakLearner(verbose)
+                # train a weak learner on the dataset
+                best_weak_learner: WeakLearner = WeakLearner(
+                    self._dataset, self._labels_set, self._weights,
+                    self._weak_learner_epochs, verbose
+                )
 
                 if update_weights:
                     AdaBoost.updateWeights(weights, best_weak_learner.getBeta(), best_weak_learner.getWeightsMap())
@@ -83,25 +75,6 @@ class AdaBoost:
     def start(self, verbose: int = 0) -> StrongLearner:
         start: Callable[[Tensor], StrongLearner] = self.startGenerator(True, verbose)
         return start(self._weights)
-
-    def _getBestWeakLearner(self, verbose: int = 0) -> WeakLearner:
-        weakLearners: ndarray[WeakLearner] = array([])
-
-        for idx in range(self._weak_learner_inst):
-            if verbose > 1:
-                print(
-                    f"\033[33mWeak learner number: {idx}. \n\033[0m"
-                    f"\033[33mWeak learner left: {self._weak_learner_inst - (idx + 1)}\033[0m"
-                )
-
-            weakLearner: WeakLearner = WeakLearner(
-                self._dataset, self._labels_set, self._weights,
-                self._weak_learner_epochs, verbose
-            )
-
-            weakLearners = append(weakLearners, [weakLearner])
-
-        return getTheBestWeakLearner(weakLearners)
 
     def getWeights(self) -> Tensor:
         return self._weights
