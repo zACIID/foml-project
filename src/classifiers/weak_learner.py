@@ -37,7 +37,7 @@ class WeakLearner:
         return self._beta
 
     def getWeights(self) -> Tensor:
-        return self._weights
+        return self._weights.detach()
 
     def getWeightsMap(self) -> Tensor:
         return self._weightsMap
