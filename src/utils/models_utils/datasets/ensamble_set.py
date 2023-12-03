@@ -13,7 +13,7 @@ class EnsambleDataset(Dataset):
         self._ids: Tensor = tensor([idx for idx in range(len(data))])
 
     def __len__(self) -> int:
-        return self._x_train.shape[0]
+        return len(self._x_train)
 
     def __getitem__(self, idx: int) -> th.ensamble_batch:
         self._x_train[idx].requires_grad_()
