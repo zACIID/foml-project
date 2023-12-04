@@ -1,5 +1,5 @@
-from typing import NewType
 from numpy import ndarray
+from torch import Tensor
 
-image = NewType('image', ndarray[ndarray[float]])
-ensamble_batch = NewType('ensamble batch', tuple[tuple[Tensor, Tensor], tuple[Tensor, Tensor]])
+Image = ndarray[ndarray[float]]
+EnsembleBatch = tuple[tuple[Tensor, Tensor], tuple[Tensor, Tensor]]

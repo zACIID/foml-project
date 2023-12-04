@@ -1,10 +1,10 @@
+from torch import Tensor, tensor
 from torch.utils.data import Dataset
-from torch import Tensor, tensor, float32, int32
-from numpy import ndarray, array
+
 import src.utils.type_utility as th
 
 
-class EnsambleDataset(Dataset):
+class EnsembleDataset(Dataset):
 
     def __init__(self, data: list[Tensor], labels: Tensor, weights: Tensor):
         self._x_train: list[Tensor] = data
@@ -15,7 +15,7 @@ class EnsambleDataset(Dataset):
     def __len__(self) -> int:
         return len(self._x_train)
 
-    def __getitem__(self, idx: int) -> th.ensamble_batch:
+    def __getitem__(self, idx: int) -> th.EnsembleBatch:
         self._x_train[idx].requires_grad_()
         self._y_train[idx].requires_grad_()
         self._weights[idx].requires_grad_()

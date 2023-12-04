@@ -1,10 +1,11 @@
 import os
-from PIL import Image
-from numpy import array, ndarray
-from torch import tensor, Tensor
 from typing import Generator
-import type_utility as tu
 
+from PIL import Image
+from numpy import array
+from torch import tensor, Tensor
+
+import type_utility as tu
 
 """
     Class which given a directory offer an ensemble of methods to 
@@ -20,7 +21,7 @@ class DataManager:
     def _from_img_to_tensor(self, img_path: str) -> Tensor:
         total_path: str = os.path.join(self._dir_path, img_path)
         with Image.open(total_path) as img:
-            data: tu.image = array(img)
+            data: tu.Image = array(img)
             return tensor(data)
 
     def get_img(self, img_path: str) -> Tensor:

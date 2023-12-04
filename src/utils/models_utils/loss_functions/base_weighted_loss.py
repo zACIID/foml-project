@@ -1,7 +1,8 @@
-import torch.nn as nn
-from torch import Tensor
-from numpy import ndarray, array, append
 from typing import Callable
+
+import torch.nn as nn
+from numpy import ndarray, array, append
+from torch import Tensor
 
 
 class WeightedBaseLoss(nn.Module):
@@ -14,6 +15,7 @@ class WeightedBaseLoss(nn.Module):
                 ids: Tensor, save: bool = False) -> Tensor:
 
         if save:
+            # TODO(pierluigi): maybe use two separate np.ndarrays
             self._error_map = append(self._error_map, {
                 "y_pred": y_pred,
                 "ids": ids

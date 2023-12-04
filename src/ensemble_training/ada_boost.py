@@ -1,9 +1,10 @@
 from typing import Callable
-from numpy import ndarray, array, append
-from torch import tensor, Tensor, ones, zeros, sum
-from src.classifiers.weak_learner import WeakLearner
-from src.classifiers.strong_learner import StrongLearner
 
+from numpy import ndarray, array, append
+from torch import Tensor, ones, sum
+
+from src.classifiers.strong_learner import StrongLearner
+from src.classifiers.weak_learner import WeakLearner
 
 """
     Class wrapping all the functionalities needed to make a training algorithm based 
