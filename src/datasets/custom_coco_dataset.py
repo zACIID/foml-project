@@ -1,6 +1,6 @@
 import enum
 import os.path
-from typing import Callable, List, Optional, Tuple, Dict
+from typing import Callable, List, Optional, Tuple, Dict, Iterable
 
 import torch
 import torchvision as tv
@@ -28,7 +28,11 @@ class Labels(enum.IntEnum):
     OTHER = 1
 
 
-class CocoDataset(VisionDataset):
+ItemType = Tuple[int, torch.Tensor, Labels, float]
+BatchType = Tuple[Iterable[int], Iterable[torch.Tensor], Iterable[Labels], Iterable[float]]
+
+
+class CocoDataset(VisionDataset[ItemType]):
     """
     Base reference: https://pytorch.org/vision/main/_modules/torchvision/datasets/coco.html
     """
@@ -58,10 +62,10 @@ class CocoDataset(VisionDataset):
 
         self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
 
-        self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.IntType())
+        self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
         """Tensor that contains, at position X, the class of the X-th sample"""
 
-        self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.FloatType())
+        self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
         """
         Tensor that contains, at position X, the weight of the X-th sample.
         Mainly used to handle class imbalance and assign more weight to the loss
@@ -107,7 +111,7 @@ class CocoDataset(VisionDataset):
             Labels.OTHER: non_person_img_ids
         }
 
-    def __getitem__(self, index: int) -> Tuple[int, torch.Tensor, Labels, float]:
+    def __getitem__(self, index: int) -> ItemType:
         img_id = self._img_ids[index]
 
         path = self._coco.loadImgs(img_id)[0]["file_name"]

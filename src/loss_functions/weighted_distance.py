@@ -1,7 +1,7 @@
-from torch import Tensor, inner
 from torch import linalg as euclidean
+from torch import Tensor, inner
 
-from utils.models_utils.loss_functions.base_weighted_loss import WeightedBaseLoss
+from loss_functions.base_weighted_loss import WeightedBaseLoss
 
 
 class WeightedDistance(WeightedBaseLoss):
