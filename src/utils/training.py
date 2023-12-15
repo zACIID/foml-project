@@ -10,7 +10,8 @@ import sklearn.model_selection as modsel
 
 @ut.print_time_perf
 def grid_search_cv_tuning(
-        model, train_data: pd.DataFrame,
+        model,
+        train_data: pd.DataFrame,
         train_target: pd.DataFrame,
         hyper_params: dict[str, object],
         k_folds: int,
