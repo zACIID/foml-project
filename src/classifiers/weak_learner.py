@@ -34,7 +34,7 @@ class WeakLearner:
             return 1 / (1 + math.exp(-x))
 
         self._error_rate = training_result[1]
-        self._beta = sigmoid(-self._error_rate)
+        self._beta = sigmoid(self._error_rate)
         self._update_weights_map(training_result[0])
 
     def _update_weights_map(self, data: tuple[Tensor, Tensor]) -> None:
