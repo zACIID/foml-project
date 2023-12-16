@@ -7,6 +7,9 @@ import torchvision as tv
 import torchvision.transforms.v2 as t2
 from pycocotools.coco import COCO
 from torchvision.datasets import VisionDataset
+from torchvision.io import ImageReadMode
+
+import src.utils.constants as const
 
 
 # TODO(pierluigi): ask biagio the following:
@@ -17,10 +20,16 @@ from torchvision.datasets import VisionDataset
 #       while dict does not
 
 
-class CocoDataTypes(enum.StrEnum):
+class CocoDatasetTypes(enum.StrEnum):
     TRAIN_2017 = "train2017"
-    VAL_2017 = "val2017"
-    TEST_2017 = "test2017"
+
+    TEST_2017 = "val2017"
+    """
+    Why test dataset refers to val instead? 
+    Because actual test dataset is not labelled, and its intended use is to make 
+    predictions that are to be submitted to COCO challenges 
+    (hence no annotations published for test dataset)
+    """
 
 
 class Labels(enum.IntEnum):
@@ -29,10 +38,10 @@ class Labels(enum.IntEnum):
 
 
 ItemType = Tuple[int, torch.Tensor, Labels, float]
-BatchType = Tuple[Iterable[int], Iterable[torch.Tensor], Iterable[Labels], Iterable[float]]
+BatchType = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
 
 
-class CocoDataset(VisionDataset[ItemType]):
+class CocoDataset(VisionDataset):
     """
     Base reference: https://pytorch.org/vision/main/_modules/torchvision/datasets/coco.html
     """
@@ -40,7 +49,7 @@ class CocoDataset(VisionDataset[ItemType]):
     def __init__(
             self,
             coco_dir: str,
-            dataset_type: CocoDataTypes,
+            dataset_type: CocoDatasetTypes,
             img_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
     ):
         """
@@ -92,7 +101,7 @@ class CocoDataset(VisionDataset[ItemType]):
                     enumerate(self._img_ids)
                 )
             )
-            img_id_indexes = torch.tensor(img_id_indexes)
+            img_id_indexes = torch.tensor(list(img_id_indexes))
 
             self._labels[img_id_indexes] = int(c)
 
@@ -115,7 +124,11 @@ class CocoDataset(VisionDataset[ItemType]):
         img_id = self._img_ids[index]
 
         path = self._coco.loadImgs(img_id)[0]["file_name"]
-        image = tv.io.read_image(path=os.path.join(self.root, path))
+        image = tv.io.read_image(
+            path=os.path.join(self.root, path),
+            # ensure that everything has 3 channels, because there are some grayscale images
+            mode=ImageReadMode.RGB
+        )
 
         label = self._labels[index]
 
@@ -145,58 +158,36 @@ class CocoDataset(VisionDataset[ItemType]):
         return self._labels
 
 
-# TODO(pierluigi): maybe move all of these declarations out of this module and wherever they are actually used
-ROOT_COCO_DIR = os.path.join("..", "..", "data")
-
-
 # Check out this article to see many different types of image augmentation
 # https://webcache.googleusercontent.com/search?q=cache:https://towardsdatascience.com/image-data-augmentation-for-deep-learning-77a87fabd2bf&strip=0&vwsrc=1&referer=medium-parser
-# TODO(pierluigi): decide how many transformations to apply to each image based on the number of basic images in the dataset
-
+#
 # Performance tips for transforms:
 # - use dtype.uint8 whenever possible
 # - normalization at the end of the pipeline and it requires dtype.float32
-
-# transform_train = transforms.Compose([
-#     transforms.RandomRotation(degrees=30),
-#     transforms.RandomVerticalFlip(),
-#     transforms.RandomHorizontalFlip(),
-#     transforms.ToTensor(),
-#     transforms.Normalize(means, stds)
-#     v2.RandomResizedCrop(size=(224, 224), antialias=True),  # Or Resize(antialias=True)
-#     ...
-#     v2.ToDtype(torch.float32, scale=True),  # Normalize expects float input
-#     v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-# ])
+#
+# As of now, no data augmentation, just resizing images to make them usable by the models,
+#    and then normalizing them
 
 COCO_TRAIN_DATASET = CocoDataset(
-    coco_dir=ROOT_COCO_DIR,
-    dataset_type=CocoDataTypes.TRAIN_2017,
+    coco_dir=const.ROOT_COCO_DIR,
+    dataset_type=CocoDatasetTypes.TRAIN_2017,
     img_transform=t2.Compose(
         transforms=[
-            # TODO
-        ]
-    )
-)
-COCO_VAL_DATASET = CocoDataset(
-    coco_dir=ROOT_COCO_DIR,
-    dataset_type=CocoDataTypes.VAL_2017,
-    img_transform=t2.Compose(
-        transforms=[
-            # TODO
+            t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
+            t2.ToDtype(torch.float32, scale=True),
+            t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
     )
 )
 
-# TODO(pierluigi): but do I even need the test dataset in this format?
 COCO_TEST_DATASET = CocoDataset(
-    coco_dir=ROOT_COCO_DIR,
-    dataset_type=CocoDataTypes.TEST_2017,
+    coco_dir=const.ROOT_COCO_DIR,
+    dataset_type=CocoDatasetTypes.TEST_2017,
     img_transform=t2.Compose(
         transforms=[
-            # TODO
+            t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
+            t2.ToDtype(torch.float32, scale=True),
+            t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
     )
 )
-# TODO(pierluigi): I do not have the annotations for the test dataset though,
-#   where do I download them from?? Need the instances_test2017.json annotation file
