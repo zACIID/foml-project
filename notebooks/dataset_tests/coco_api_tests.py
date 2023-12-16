@@ -17,6 +17,7 @@
 # ## Download COCO 2017 Dataset - Uncomment if Necessary
 
 # %%
+import torch
 # %matplotlib inline
 
 from pycocotools.coco import COCO
@@ -130,8 +131,9 @@ pylab.rcParams['figure.figsize'] = (8.0, 10.0)
 
 # %%
 DATA_DIR = os.path.join("..", "..", "data")
-DATA_TYPE = 'train2017'  # use val set for sketches because it is smaller and faster to load
+DATA_TYPE = 'val2017'  # use val set for sketches because it is smaller and faster to load
 ANNFILE = os.path.join(DATA_DIR, "annotations", f"instances_{DATA_TYPE}.json")
+# ANNFILE = os.path.join(DATA_DIR, "annotations", "image_info_test2017.json")
 
 # initialize COCO api for instance annotations
 coco = COCO(ANNFILE)
@@ -189,7 +191,7 @@ list(coco.imgs.values())[:10]
 # %%
 import random
 
-for i in range(3):
+for i in range(1):
     sample_ids = random.Random().sample(population=non_person_img_ids, k=5)
     imgs = coco.loadImgs(ids=sample_ids)
     for img in imgs:
@@ -208,7 +210,7 @@ for i in range(3):
 import random
 
 person_img_ids_list = list(person_img_ids)
-for i in range(3):
+for i in range(1):
     sample_ids = random.Random().sample(population=person_img_ids_list, k=5)
     imgs = coco.loadImgs(ids=sample_ids)
     for img in imgs:
@@ -219,5 +221,80 @@ for i in range(3):
         plt.imshow(I)
         plt.show()
 
+
+# %%
+
+# %% [markdown]
+# ## Other Stuf
+
+# %%
+# %load_ext autoreload
+
+import torch
+import torch.utils.data as thd
+import torchvision.transforms.v2 as t2
+import tqdm
+
+import src.datasets.custom_coco_dataset as cd
+import src.utils.constants as const
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.set_default_device(device)
+
+dataset = cd.CocoDataset(
+    coco_dir=const.ROOT_COCO_DIR,
+    dataset_type=cd.CocoDatasetTypes.TRAIN_2017,
+    img_transform=t2.Compose([
+        t2.ToDtype(dtype=torch.float32),
+        t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
+    ])
+)
+
+loader = thd.DataLoader(dataset=dataset, batch_size=64, shuffle=True)
+
+# for batch in loader:
+#     batch: cd.BatchType
+#     ids, imgs, labels, weights = batch
+#     print(type(imgs))
+#     print(imgs.shape)
+
+# Reference:
+# https://stackoverflow.com/questions/60101240/finding-mean-and-standard-deviation-across-image-channels-pytorch
+
+n_images = 0
+mean = 0.
+std = 0.
+try:
+    for batch in tqdm.tqdm(loader):
+        batch: cd.BatchType
+        ids, imgs, labels, weights = batch
+        
+        if imgs.size(0) == 1:
+            print(imgs.shape)
+        
+        # Rearrange batch to be the shape of [BatchSize, Channels, W * H], 
+        # from [BatchSize, Channels, W, H].
+        # -1 is used to let pytorch infer from other dims. 
+        # Here it is the equivalent of imgs.size(2)*imgs.size(3)
+        imgs: torch.Tensor = imgs.view(imgs.size(0), imgs.size(1), -1)  
+        
+        # Update total number of images
+        n_images += imgs.size(0)
+        
+        # Compute mean and std here, on the pixel dimension, 
+        #   and then sum every image in the batch
+        mean += imgs.mean(2).sum(0)
+        std += imgs.std(2).sum(0)
+except Exception as ex:
+    print(ex)
+
+# Final step
+mean /= n_images
+std /= n_images
+
+print(mean)
+print(std)
+
+# %%
 
 # %%
