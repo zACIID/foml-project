@@ -35,7 +35,7 @@ class StrongLearner(object):
 
     def _initialize_alphas(self) -> None:
         for idx, weak_learner in enumerate(self._weak_learners):
-            self._alphas[idx] = math.log(1 / weak_learner.getBeta())
+            self._alphas[idx] = math.log(1 / weak_learner.get_beta())
 
     def get_weak_learners(self) -> Sequence[WeakLearner]:
         return self._weak_learners
