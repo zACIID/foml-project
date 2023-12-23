@@ -1,3 +1,5 @@
+from typing import Type
+
 from torch import Tensor, cat
 import torch.nn as nn
 
@@ -9,7 +11,7 @@ class FireLayer(nn.Module):
             out_channels_sqz: int,
             out_channels_exp_ones: int,
             out_channels_exp_threes: int,
-            act_fun: nn.Module,
+            act_fun: Type[nn.Module],
             n_dims: int = 3,
             device: str = None
     ):

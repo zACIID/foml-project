@@ -1,3 +1,5 @@
+from typing import Type
+
 import torch.nn as nn
 from torch import Tensor, no_grad
 from torch.optim import Adam
@@ -13,7 +15,7 @@ from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
 class SimpleLearner(nn.Module):
-    def __init__(self, k_classes: int = 2, act_fun: nn.Module = nn.SiLU, device: str = None):
+    def __init__(self, k_classes: int = 2, act_fun: Type[nn.Module] = nn.SiLU, device: str = None):
         super().__init__()
 
         self._pipe_line: nn.Sequential = nn.Sequential(
