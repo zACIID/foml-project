@@ -297,4 +297,30 @@ print(std)
 
 # %%
 
+# %% [markdown]
+# ## Test
+
+# %%
+import torch as th
+import torch.utils.data as thd
+import torchvision.transforms.v2 as t2
+import tqdm
+
+import src.datasets.custom_coco_dataset as cd
+import src.utils.constants as const
+from src.classifiers.alex_net import AlexNet
+
+# %%
+dataset = cd.CocoDataset(
+    coco_dir=const.ROOT_COCO_DIR,
+    dataset_type=cd.CocoDatasetTypes.TRAIN_2017,
+    img_transform=t2.Compose([
+        t2.ToDtype(dtype=th.float32),
+        t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
+    ])
+)
+model = AlexNet()
+
+training_result = model.fit(dataset, epochs=3, verbose=1) 
+
 # %%

@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch import Tensor
 
-from base_weighted_loss import WeightedBaseLoss
+from .base_weighted_loss import WeightedBaseLoss
 
 
 class WeightedCrossEntropy(WeightedBaseLoss):

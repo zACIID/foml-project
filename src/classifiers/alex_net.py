@@ -89,7 +89,8 @@ class AlexNet(nn.Module):
                 y_pred: Tensor = self(x_batch)
 
                 batch_loss: Tensor = loss(
-                    y_true=y_batch, y_pred=y_pred,
+                    # TODO rivedere il tipo della loss
+                    y_true=y_batch, y_pred=y_pred, weights=wgt_batch
                 )
                 cum_loss += batch_loss.item()
 

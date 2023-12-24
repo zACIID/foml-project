@@ -11,10 +11,12 @@ class WeightedBaseLoss(nn.Module):
         self._ids: Tensor = tensor([])
         self._sub_loss: Callable[[Tensor, Tensor, Tensor], Tensor] = sub_loss
 
-    def forward(self, y_true: Tensor, y_pred: Tensor, weights: Tensor,
-                ids: Tensor, save: bool = False) -> Tensor:
+    def forward(self, y_true: Tensor, y_pred: Tensor, weights: Tensor = None,
+                ids: Tensor = None, save: bool = False) -> Tensor:
 
         if save:
+            assert weights is not None and ids is not None, "Must provide weights and ids if save is True"
+
             self._pred = cat((self._pred, y_pred))
             self._ids = cat((self._ids, ids))
 
