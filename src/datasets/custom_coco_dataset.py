@@ -1,6 +1,6 @@
 import enum
 import os.path
-from typing import Callable, List, Optional, Tuple, Dict, Iterable
+from typing import Callable, List, Optional, Tuple, Dict
 
 import torch
 import torchvision as tv
@@ -10,14 +10,6 @@ from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode
 
 import src.utils.constants as const
-
-
-# TODO(pierluigi): ask biagio the following:
-#  1. is it okay if requires_grad is called whenever needed and not inside the dataset
-#  2. what's the next step? to wrap this with the dataset class of the AdaBoost project?
-#  3. Discuss image transformations
-#  4. Tell biagio that in the end I stuck with a 4-tuple for __get_item__ because it allows us to type each field,
-#       while dict does not
 
 
 class CocoDatasetTypes(enum.StrEnum):
@@ -81,9 +73,18 @@ class CocoDataset(VisionDataset):
             of minority samples.
         """
 
+        self._cardinality_by_class: Dict[Labels, int] = {}
+
+    def load(self):
+        """
+        Initialize the dataset by fetching image metadata,
+            so that it is ready to provide data samples
+        :return:
+        """
+
         img_ids_by_class = self._get_img_ids_by_class()
 
-        self._cardinality_by_class: Dict[Labels, int] = {
+        self._cardinality_by_class = {
             c: len(ids) for c, ids in img_ids_by_class.items()
         }
 
@@ -121,6 +122,11 @@ class CocoDataset(VisionDataset):
         }
 
     def __getitem__(self, index: int) -> ItemType:
+        assert len(self._img_ids) > 0, ("Either method `load` was not called or something went wrong "
+                                        "when fetching the dataset from the specified folder; "
+                                        "verify that the COCO dataset is present at the specified location "
+                                        f"({self.root})")
+
         img_id = self._img_ids[index]
 
         path = self._coco.loadImgs(img_id)[0]["file_name"]
@@ -149,7 +155,6 @@ class CocoDataset(VisionDataset):
     def get_class_cardinality(self, label: Labels) -> int:
         return self._cardinality_by_class[label]
 
-    @property
     def get_labels(self) -> torch.Tensor:
         """
         Tensor that contains, at position X, the class of the X-th sample

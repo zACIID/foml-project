@@ -29,7 +29,7 @@ class AdaBoost:
         self._weights: Tensor = self._initialize_weights()
 
     def _initialize_weights(self) -> Tensor:
-        classes_mask: Tensor = self._dataset.get_labels
+        classes_mask: Tensor = self._dataset.get_labels()
         weights: Tensor = th.zeros(classes_mask.shape[0])
 
         for lbl in Labels:

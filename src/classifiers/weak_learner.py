@@ -38,7 +38,7 @@ class WeakLearner:
         self._update_weights_map(training_result[0])
 
     def _update_weights_map(self, data: tuple[Tensor, Tensor]) -> None:
-        classes_mask: Tensor = self._dataset.get_labels
+        classes_mask: Tensor = self._dataset.get_labels()
         preds, ids = data
         for pred, _id in zip(preds, ids):
             model_pred: int = argmax(pred).item()
