@@ -77,18 +77,10 @@ class WeakLearner:
 
     def _update_weights_map(self, data: ErrorMap) -> None:
         classes_mask: Tensor = self._dataset.get_labels()
-
-        # TODO(pierluigi): pretty sure this can be done all with tensors so
-        #  that data can stay in the GPU, need to look into it
-
-        # Data has to be moved to cpu to be elaborated within a loop
         preds, ids = data
-        preds, ids = preds.cpu(), ids.cpu()
-
-        for pred, _id in zip(preds, ids):
-            model_pred: int = argmax(pred).item()
-            weight_flag: bool = model_pred == classes_mask[_id]
-            self._weights_map[_id.to(int32)] = weight_flag
+        ids = ids.to(th.int)
+        max_preds: Tensor = th.squeeze(th.argmax(preds, dim=1), dim=1)
+        self._weights_map[ids] = max_preds == classes_mask[ids]
 
     def predict(self, samples: Tensor) -> Tensor:
         return self._simple_learner.predict(samples)
