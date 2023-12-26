@@ -30,7 +30,9 @@ class Labels(enum.IntEnum):
 
 
 ItemType = Tuple[int, torch.Tensor, Labels, float]
+
 BatchType = Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+"""(img_id, img, label, sample_weight)"""
 
 
 class CocoDataset(VisionDataset):
@@ -43,6 +45,7 @@ class CocoDataset(VisionDataset):
             coco_dir: str,
             dataset_type: CocoDatasetTypes,
             img_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+            device: torch.device = None
     ):
         """
         :param coco_dir: root directory of the COCO dataset,
@@ -58,15 +61,20 @@ class CocoDataset(VisionDataset):
             target_transform=None
         )
 
-        ann_file_path = os.path.join(coco_dir, "annotations", f"instances_{dataset_type}.json")
-        self._coco = COCO(annotation_file=ann_file_path)
+        if device is not None:
+            self._device = device
+        else:
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
+        self._coco: COCO | None = None
+        self.dataset_type = dataset_type
 
-        self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
+        self._img_ids: List[int] | None = None
+
+        self._labels: torch.Tensor | None = None
         """Tensor that contains, at position X, the class of the X-th sample"""
 
-        self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
+        self._weights: torch.Tensor | None = None
         """
         Tensor that contains, at position X, the weight of the X-th sample.
         Mainly used to handle class imbalance and assign more weight to the loss
@@ -81,6 +89,12 @@ class CocoDataset(VisionDataset):
             so that it is ready to provide data samples
         :return:
         """
+        ann_file_path = os.path.join(self.root, "..", "annotations", f"instances_{self.dataset_type}.json")
+        self._coco = COCO(annotation_file=ann_file_path)
+
+        self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
+        self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
+        self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
 
         img_ids_by_class = self._get_img_ids_by_class()
 
@@ -135,6 +149,7 @@ class CocoDataset(VisionDataset):
             # ensure that everything has 3 channels, because there are some grayscale images
             mode=ImageReadMode.RGB
         )
+        image.to(self._device)
 
         label = self._labels[index]
 
@@ -143,7 +158,8 @@ class CocoDataset(VisionDataset):
         if self.transform is not None:
             image = self.transform(image)
 
-        return img_id, image, label, sample_weight
+        # TODO(pierluigi): specify that now it is the index being returned and not an actual id
+        return index, image, label, sample_weight
 
     def __len__(self) -> int:
         """
@@ -173,6 +189,8 @@ class CocoDataset(VisionDataset):
 # As of now, no data augmentation, just resizing images to make them usable by the models,
 #    and then normalizing them
 
+_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 COCO_TRAIN_DATASET = CocoDataset(
     coco_dir=const.ROOT_COCO_DIR,
     dataset_type=CocoDatasetTypes.TRAIN_2017,
@@ -182,7 +200,8 @@ COCO_TRAIN_DATASET = CocoDataset(
             t2.ToDtype(torch.float32, scale=True),
             t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
-    )
+    ),
+    device=_device
 )
 
 COCO_TEST_DATASET = CocoDataset(
@@ -194,5 +213,6 @@ COCO_TEST_DATASET = CocoDataset(
             t2.ToDtype(torch.float32, scale=True),
             t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
-    )
+    ),
+    device=_device
 )

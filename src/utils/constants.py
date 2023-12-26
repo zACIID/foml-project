@@ -4,7 +4,8 @@ from typing import Tuple
 
 RND_SEED = 777
 
-ROOT_COCO_DIR = os.path.join("..", "..", "data")
+# NOTE(pierluigi): 3 jumps back from file absolute path: file->utils, utils->src, src->root
+ROOT_COCO_DIR = os.path.abspath(os.path.join(__file__, "..", "..", "..", "data"))
 """Directory where COCO dataset is stored/downloaded"""
 
 INPUT_IMAGE_SIZE: Tuple[int, int] = (224, 224)
