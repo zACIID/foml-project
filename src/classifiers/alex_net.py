@@ -1,11 +1,10 @@
+from collections import OrderedDict
 from typing import Type
 
+import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
 from torch.optim import Adam
-
-from collections import OrderedDict
-
 from torch.utils.data import Dataset, DataLoader
 
 from datasets.custom_coco_dataset import ItemType, BatchType
@@ -29,9 +28,18 @@ class AlexNet(nn.Module):
     - Softmax
     """
     
-    def __init__(self, k_classes: int = 2, act_fun: Type[nn.Module] = nn.SiLU, device: str = None):
-
+    def __init__(
+            self,
+            k_classes: int = 2,
+            act_fun: Type[nn.Module] = nn.SiLU,
+            device: torch.device = None
+    ):
         super().__init__()
+
+        if device is not None:
+            self._device = device
+        else:
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self._pipe_line: nn.Sequential = nn.Sequential(
             OrderedDict([
@@ -67,14 +75,19 @@ class AlexNet(nn.Module):
                 ('softmax', nn.Softmax(dim=0))
             ])
         )
+        self._pipe_line = self._pipe_line.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
         return self._pipe_line(batch)
 
-    def fit(self, dataset: Dataset[ItemType], batch_size: int = 32,
-            epochs: int = 10, loss: nn.Module = None,
-            verbose: int = 0) -> float:
-
+    def fit(
+            self,
+            dataset: Dataset[ItemType],
+            batch_size: int = 32,
+            epochs: int = 10,
+            loss: nn.Module = None,
+            verbose: int = 0
+    ) -> float:
         adam_opt: Adam = Adam(self.parameters())
         loss = WeightedCrossEntropy() if loss is None else loss
         cum_loss: float = .0

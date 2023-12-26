@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, List
 
 import torch as th
 from torch import Tensor, sum
@@ -16,8 +16,8 @@ from datasets.custom_coco_dataset import CocoDataset, Labels
 class AdaBoost:
     def __init__(
             self,
-            n_eras: int,
             dataset: CocoDataset,
+            n_eras: int,
             n_classes: int,
             weak_learner_epochs: int = 10,
     ):
@@ -25,16 +25,18 @@ class AdaBoost:
         self._dataset: CocoDataset = dataset
         self._n_classes: int = n_classes
         self._weak_learner_epochs: int = weak_learner_epochs
-        self._weak_learners: Tensor = th.tensor([])
+        self._weak_learners: List[WeakLearner] = []
         self._weights: Tensor = self._initialize_weights()
 
     def _initialize_weights(self) -> Tensor:
         classes_mask: Tensor = self._dataset.get_labels()
         weights: Tensor = th.zeros(classes_mask.shape[0])
 
+        # TODO(pierluigi): capire se anche weights ha senso che sia messo nella cpu
+
         for lbl in Labels:
-            card: int = self._dataset.get_class_cardinality(label=lbl)
-            weights[classes_mask == int(lbl)] = 1 / (2 * card)
+            class_cardinality: int = self._dataset.get_class_cardinality(label=lbl)
+            weights[classes_mask == int(lbl)] = 1 / (2 * class_cardinality)
 
         return weights
 
@@ -43,9 +45,16 @@ class AdaBoost:
         weights /= sum(weights)
 
     @staticmethod
-    def update_weights(weights: Tensor, weak_learner_beta: float,
-                       weak_learner_weights_map: Tensor) -> None:
+    def update_weights(
+            weights: Tensor,
+            weak_learner_beta: float,
+            weak_learner_weights_map: Tensor
+    ) -> None:
+        """Update is performed in-place"""
 
+        # TODO(pierluigi): shouldn't this be beta^weights_map??
+        #   because weight map is either 0 or 1 for each sample,
+        #   depending on if the prediction for such sample was correct
         weights[weak_learner_weights_map] *= weak_learner_beta
 
     def start_generator(
@@ -53,32 +62,32 @@ class AdaBoost:
             update_weights: bool = True,
             verbose: int = 0
     ) -> Callable[[Tensor], StrongLearner]:
+        # TODO(pierluigi): chieder a Biagio perche puo essere utile questo metodo che wrappa tutto in una funzione
 
         def detached_start(weights: Tensor) -> StrongLearner:
-
             for era in range(self._n_eras):
                 AdaBoost.normalize_weights(weights)
 
                 weak_learner: WeakLearner = WeakLearner(
-                    self._dataset, self._weights,
-                    self._weak_learner_epochs, verbose
+                    dataset=self._dataset,
+                    weights=self._weights,
+                    epochs=self._weak_learner_epochs,
+                    verbose=verbose
                 )
 
                 if update_weights:
                     AdaBoost.update_weights(
-                        weights, weak_learner.get_beta(),
-                        weak_learner.get_weights_map()
+                        weights=weights,
+                        weak_learner_beta=weak_learner.get_beta(),
+                        weak_learner_weights_map=weak_learner.get_weights_map()
                     )
 
-                self._weak_learners = th.cat((
-                    self._weak_learners,
-                    th.tensor([weak_learner])
-                ))
+                self._weak_learners.append(weak_learner)
 
                 if verbose > 1:
                     print(f"\033[31mEras left: {self._n_eras - (era + 1)}\033[0m")
 
-            return StrongLearner(self._weak_learners)
+            return StrongLearner(weak_learners=self._weak_learners)
 
         return detached_start
 

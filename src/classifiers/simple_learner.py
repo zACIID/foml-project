@@ -1,24 +1,33 @@
-from typing import Type
+from collections import OrderedDict
+from typing import Type, Tuple
 
+import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
 from torch.optim import Adam
-
-from collections import OrderedDict
-
 from torch.utils.data import Dataset, DataLoader
 
 from datasets.custom_coco_dataset import ItemType, BatchType
 from layers.fire_layer import FireLayer
-from loss_functions.base_weighted_loss import WeightedBaseLoss
+from loss_functions.base_weighted_loss import WeightedBaseLoss, ErrorMap
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
 class SimpleLearner(nn.Module):
-    def __init__(self, k_classes: int = 2, act_fun: Type[nn.Module] = nn.SiLU, device: str = None):
+    def __init__(
+            self,
+            k_classes: int = 2,
+            act_fun: Type[nn.Module] = nn.SiLU,
+            device: torch.device = None
+    ):
         super().__init__()
 
-        self._pipe_line: nn.Sequential = nn.Sequential(
+        if device is not None:
+            self._device = device
+        else:
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self._layers: nn.Sequential = nn.Sequential(
             OrderedDict([
                 ('conv1', nn.Conv2d(in_channels=3, out_channels=96,
                                     kernel_size=7, stride=2, device=device)),
@@ -42,17 +51,27 @@ class SimpleLearner(nn.Module):
                 ('softmax', nn.Softmax(dim=0))
             ])
         )
+        self._layers = self._layers.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
-        return self._pipe_line(batch)
+        return self._layers(batch)
 
-    def fit(self, dataset: Dataset[ItemType], adaboost_wgt: Tensor, batch_size: int = 32,
-            epochs: int = 10, loss: WeightedBaseLoss = None,
-            verbose: int = 0) -> tuple[tuple[Tensor, Tensor], float]:
-
+    def fit(
+            self,
+            dataset: Dataset[ItemType],
+            adaboost_weights: Tensor,
+            loss: WeightedBaseLoss = None,
+            batch_size: int = 32,
+            epochs: int = 10,
+            verbose: int = 0
+    ) -> Tuple[ErrorMap, float]:
         adam_opt: Adam = Adam(self.parameters())
+
         loss = WeightedCrossEntropy() if loss is None else loss
+        loss.to(device=self._device)
         cum_loss: float = .0
+
+        adaboost_weights = adaboost_weights.to(self._device)
 
         self.train()
         for epoch in range(epochs):
@@ -62,11 +81,14 @@ class SimpleLearner(nn.Module):
                 ids, x_batch, y_batch, wgt_batch = batch
 
                 y_pred: Tensor = self(x_batch)
-                mixed_weights: Tensor = adaboost_wgt[ids] * wgt_batch
+                mixed_weights: Tensor = adaboost_weights[ids] * wgt_batch
 
                 batch_loss: Tensor = loss(
-                    y_true=y_batch, y_pred=y_pred, weights=mixed_weights,
-                    ids=ids, save=True if epoch == epochs - 1 else False
+                    y_true=y_batch,
+                    y_pred=y_pred,
+                    weights=mixed_weights,
+                    ids=ids,
+                    save=True if epoch == epochs - 1 else False
                 )
                 cum_loss += batch_loss.item()
 
@@ -86,7 +108,8 @@ class SimpleLearner(nn.Module):
             return self.__call__(samples)
 
     def get_modules(self) -> nn.Sequential:
-        return self._pipe_line
+        return self._layers
 
     def set_modules(self, new_modules: nn.Sequential) -> None:
-        self._pipe_line = new_modules
+        self._layers = new_modules
+        self._layers.to(self._device)

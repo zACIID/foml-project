@@ -1,48 +1,92 @@
 import math
+from typing import Tuple
 
 import torch
 from torch import Tensor, ones, argmax, int32
 
 from classifiers.simple_learner import SimpleLearner
 from datasets.custom_coco_dataset import CocoDataset
+from loss_functions.base_weighted_loss import ErrorMap
 
 
 class WeakLearner:
     def __init__(
-            self, dataset: CocoDataset, weights: Tensor,
-            epochs: int = 10, verbose: int = 0
+            self,
+            dataset: CocoDataset,
+            weights: Tensor,
+            epochs: int = 10,
+            verbose: int = 0,
+            device: torch.device = None
     ):
+        """
+        :param dataset:
+        :param weights: AdaBoost weights - vector of dataset length that weighs the loss of each instance
+        :param epochs:
+        :param verbose:
+        :param device:
+        """
+
+        if device is not None:
+            self._device = device
+        else:
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         self._dataset: CocoDataset = dataset
+
         self._weights: Tensor = weights
+
+        # Make sure weights device is the same as the one assigned to this learner
+        self._weights = self._weights.to(device)
+
         self._weights.requires_grad_()
-        self._simple_learner: SimpleLearner = SimpleLearner()
+
+        self._simple_learner: SimpleLearner = SimpleLearner(device=device)
         self._error_rate: float = .0
-        self._beta: float = .0
         self._accuracy: float = .0
-        self._weights_map: Tensor = ones(self._weights.shape[0], dtype=torch.bool)
+
+        self._beta: float = .0
+        """AdaBoost coefficient used to weigh each prediction"""
+
+        self._weights_map: Tensor = ones(self._weights.shape[0], dtype=torch.bool, device=device)
+        """
+        Basically a prediction mask: for each sample contains either 1, 
+        if this learner predicts it correctly, or 0, otherwise.
+        Used by AdaBoost in conjunction with the Beta param to decrease the 
+        weights of the samples predicted correctly
+        """
 
         self._fit(epochs=epochs, verbose=verbose)
 
     def _fit(self, epochs: int = 5, verbose: int = 0) -> None:
-        training_result: tuple[tuple[Tensor, Tensor], float] = self._simple_learner.fit(
-            dataset=self._dataset, adaboost_wgt=self._weights,
-            epochs=epochs, verbose=verbose
+        training_result: Tuple[ErrorMap, float] = self._simple_learner.fit(
+            dataset=self._dataset,
+            adaboost_weights=self._weights,
+            epochs=epochs,
+            verbose=verbose
         )
+        error_map, cum_loss = training_result
 
         # sigmoid used to make sure that the error rate is a number \in [0, 1]
         def sigmoid(x):
             return 1 / (1 + math.exp(-x))
 
-        self._error_rate = training_result[1]
+        self._error_rate = cum_loss
         self._beta = sigmoid(self._error_rate)
-        self._update_weights_map(training_result[0])
+        self._update_weights_map(error_map)
 
-    def _update_weights_map(self, data: tuple[Tensor, Tensor]) -> None:
+    def _update_weights_map(self, data: ErrorMap) -> None:
         classes_mask: Tensor = self._dataset.get_labels()
+
+        # TODO(pierluigi): pretty sure this can be done all with tensors so
+        #  that data can stay in the GPU, need to look into it
+
+        # Data has to be moved to cpu to be elaborated within a loop
         preds, ids = data
+        preds, ids = preds.cpu(), ids.cpu()
+
         for pred, _id in zip(preds, ids):
             model_pred: int = argmax(pred).item()
-            weight_flag: bool = model_pred == classes_mask[_id].value
+            weight_flag: bool = model_pred == classes_mask[_id]
             self._weights_map[_id.to(int32)] = weight_flag
 
     def predict(self, samples: Tensor) -> Tensor:
