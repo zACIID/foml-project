@@ -1,5 +1,6 @@
 from typing import Callable, List
 
+import torch
 import torch as th
 from torch import Tensor, sum
 
@@ -20,7 +21,13 @@ class AdaBoost:
             n_eras: int,
             n_classes: int,
             weak_learner_epochs: int = 10,
+            device: torch.device = None
     ):
+        if device is not None:
+            self._device = device
+        else:
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         self._n_eras: int = n_eras
         self._dataset: CocoDataset = dataset
         self._n_classes: int = n_classes
@@ -41,8 +48,8 @@ class AdaBoost:
         return weights
 
     @staticmethod
-    def normalize_weights(weights: Tensor) -> None:
-        weights /= sum(weights)
+    def normalize_weights(weights: Tensor) -> Tensor:
+        return weights / sum(weights)
 
     @staticmethod
     def update_weights(
@@ -55,7 +62,9 @@ class AdaBoost:
         # TODO(pierluigi): shouldn't this be beta^weights_map??
         #   because weight map is either 0 or 1 for each sample,
         #   depending on if the prediction for such sample was correct
-        weights[weak_learner_weights_map] *= weak_learner_beta
+        # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
+        #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
+        weights.data[weak_learner_weights_map] *= weak_learner_beta
 
     def start_generator(
             self,
@@ -66,13 +75,14 @@ class AdaBoost:
 
         def detached_start(weights: Tensor) -> StrongLearner:
             for era in range(self._n_eras):
-                AdaBoost.normalize_weights(weights)
+                weights = AdaBoost.normalize_weights(weights)
 
                 weak_learner: WeakLearner = WeakLearner(
                     dataset=self._dataset,
                     weights=self._weights,
                     epochs=self._weak_learner_epochs,
-                    verbose=verbose
+                    verbose=verbose,
+                    device=self._device
                 )
 
                 if update_weights:
@@ -87,7 +97,7 @@ class AdaBoost:
                 if verbose > 1:
                     print(f"\033[31mEras left: {self._n_eras - (era + 1)}\033[0m")
 
-            return StrongLearner(weak_learners=self._weak_learners)
+            return StrongLearner(weak_learners=self._weak_learners, device=self._device)
 
         return detached_start
 

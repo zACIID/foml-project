@@ -55,6 +55,7 @@ class WeakLearner:
         weights of the samples predicted correctly
         """
 
+        # TODO(pierluigi): not a fan of performing stuff in the constructor because constructors should not have side effects
         self._fit(epochs=epochs, verbose=verbose)
 
     def _fit(self, epochs: int = 5, verbose: int = 0) -> None:

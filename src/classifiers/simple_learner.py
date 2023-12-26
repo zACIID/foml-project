@@ -27,6 +27,8 @@ class SimpleLearner(nn.Module):
         else:
             self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+        self._k_classes = k_classes
+
         self._layers: nn.Sequential = nn.Sequential(
             OrderedDict([
                 ('conv1', nn.Conv2d(in_channels=3, out_channels=96,
@@ -82,6 +84,21 @@ class SimpleLearner(nn.Module):
 
                 y_pred: Tensor = self(x_batch)
                 mixed_weights: Tensor = adaboost_weights[ids] * wgt_batch
+
+                # TODO(pierluigi): qui quello che stavo cercando di fare era creare un vettore di probabilita partendo
+                #   da un y_batch formato di singole label
+                #   es. batch e un tensore [0, 1, 0, 1, ...] ma noi vogliamo che sia [[1, 0], [0, 1], [1, 0], ...),
+                #       ovvero che sia una distrib di probabilita
+                #   Stavo cercando di fare sta cosa usando pytorch ma sono impedito, la soluzione semplice e la seguente:
+                #       La classe CocoDataset accetta un parametero `prob_distr_labels` che segnala alla __get_item__
+                #       di ritornare un tensore di probabilita invece che la label corretta e basta
+
+                # labels are single numbers, but our target should be a probability vector
+                #   with the slot for the correct class set to 1
+                y_true_prob_distr = torch.zeros([y_pred.size(dim=0), y_pred.size(dim=1)])
+                # idxs = torch.stack((torch.tensor(list(range(y_batch.size(dim=0)))), y_batch), dim=1)
+                idxs = torch.stack((torch.tensor(list(range(y_batch.size(dim=0)))), y_batch))
+                y_true_prob_distr[idxs] = 1
 
                 batch_loss: Tensor = loss(
                     y_true=y_batch,
