@@ -1,5 +1,5 @@
 from typing import Sequence
-
+from torch import linalg as euclidean
 import torch
 import torch as th
 from torch import Tensor
@@ -30,35 +30,33 @@ class StrongLearner:
         self._alphas: Tensor = th.ones(len(self._weak_learners), dtype=th.float32)
         self._initialize_alphas()
 
-    def predict_image(self, img: Tensor) -> Tensor:
-        final_distribution: Tensor = th.zeros(self._k_classes, device=self._device)
-        for weak_learner, alpha in zip(self._weak_learners, self._alphas):
-            weak_learner: WeakLearner
-            alpha: Tensor = alpha.to(self._device)
+    def predict(self, images: Tensor) -> Tensor:
+        Pred: Tensor = self._get_preds(images)
+        result_mat: Tensor = Pred @ self._alphas
+        return th.argmax(result_mat, dim=0)
 
-            wk_pred: Tensor = th.squeeze(weak_learner.predict(img), 1)
-            final_distribution += alpha * wk_pred
+    def _get_betas(self) -> Tensor:
+        betas: Tensor = th.tensor([], dtype=th.float32)
+        for wk_l in self._weak_learners:
+            betas = th.cat((betas, th.tensor([wk_l.get_beta()])))
 
-        # Get class with the highest probability
-        # Need to re-normalize to 1 after multiplying by the alpha weights
-        return th.argmax(final_distribution / th.euclidean.norm(final_distribution, 1))
+        return betas.to(self._device)
 
-    def predict_images(self, images: Tensor) -> Tensor:
-        preds: Tensor = th.tensor([], dtype=th.int32, device=self._device)
+    def _get_preds(self, samples: Tensor) -> Tensor:
+        col_size: int = samples.shape[0] if samples.dim() > 3 else 1
+        pred_mat: Tensor = th.zeros((
+            len(self._weak_learners), col_size, self._k_classes
+        ))
 
-        images = images.cpu()
-        for img in images:
-            # Note(pierluigi): unsqueeze is done so that cat can work
-            pred: Tensor = th.unsqueeze(self.predict_image(img), dim=0)
-            preds = th.cat((preds, pred))
+        for idx, wk_l in enumerate(self._weak_learners):
+            pred_mat[idx] = wk_l.predict(samples)
 
-        return preds
+        return th.transpose(pred_mat, dim0=0, dim1=2).to(self._device)
 
     def _initialize_alphas(self) -> None:
-        for idx, weak_learner in enumerate(self._weak_learners):
-            # TODO(pierluigi): si sbrega qui se tensore e in gpu e uso math.log? Oppure si sbrega cosi?
-            self._alphas[idx] = torch.log(1 / weak_learner.get_beta())
+        betas: Tensor = self._get_betas()
+        self.alphas = th.log(1 / betas)
+        self.alphas = self.alphas / euclidean.norm(self.alphas, dim=0)
 
     def get_weak_learners(self) -> Sequence[WeakLearner]:
         return self._weak_learners
-

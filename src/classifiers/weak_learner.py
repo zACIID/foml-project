@@ -14,6 +14,7 @@ class WeakLearner:
             self,
             dataset: CocoDataset,
             weights: Tensor,
+            k_classes: int = 2,
             epochs: int = 10,
             verbose: int = 0,
             device: torch.device = None
@@ -32,7 +33,7 @@ class WeakLearner:
             self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self._dataset: CocoDataset = dataset
-
+        self._k_classes: int = k_classes
         self._weights: Tensor = weights
 
         # Make sure weights device is the same as the one assigned to this learner
@@ -40,7 +41,7 @@ class WeakLearner:
 
         self._weights.requires_grad_()
 
-        self._simple_learner: SimpleLearner = SimpleLearner(device=device)
+        self._simple_learner: SimpleLearner = SimpleLearner(k_classes=self._k_classes, device=device)
         self._error_rate: float = .0
         self._accuracy: float = .0
 
@@ -82,8 +83,17 @@ class WeakLearner:
         max_preds: Tensor = th.squeeze(th.argmax(preds, dim=1), dim=1)
         self._weights_map[ids] = max_preds == classes_mask[ids]
 
+    """
+        This function returns:
+        a) a tensor of shape: (n_samples, k_classes) 
+        Where the n_samples is the number of input images 
+    """
     def predict(self, samples: Tensor) -> Tensor:
-        return self._simple_learner.predict(samples)
+        pred: Tensor = self._simple_learner.predict(samples)
+        if samples.dim() == 3: # the input is a single image
+            pred = th.transpose(pred, dim0=0, dim1=1)
+
+        return pred
 
     def get_error_rate(self) -> float:
         return self._error_rate

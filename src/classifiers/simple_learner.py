@@ -50,13 +50,14 @@ class SimpleLearner(nn.Module):
                                     kernel_size=1, device=device)),
                 ('averagepool', nn.AvgPool2d(kernel_size=12, stride=1)),
                 ('flatten', nn.Flatten()),
-                ('softmax', nn.Softmax(dim=0))
             ])
         )
         self._layers = self._layers.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
-        return self._layers(batch)
+        dim: int = 0 if batch.dim() == 3 else 1
+        batch_ft_map: Tensor = self._pipe_line(batch)
+        return nn.functional.softmax(input=batch_ft_map, dim=dim)
 
     def fit(
             self,
@@ -118,6 +119,12 @@ class SimpleLearner(nn.Module):
 
         return loss.get_error_map(), cum_loss
 
+
+    """
+        This function either returns: 
+        a) a tensor of shape: (k_classes, 1) if the number of samples is 1
+        b) a tensor of shape: (n_samples, k_classes) otherwise
+    """
     def predict(self, samples: Tensor) -> Tensor:
         with no_grad():
             self.eval()  # Set the model to evaluation mode (if applicable)
