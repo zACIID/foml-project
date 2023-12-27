@@ -79,19 +79,22 @@ class WeakLearner:
     def _update_weights_map(self, data: ErrorMap) -> None:
         classes_mask: Tensor = self._dataset.get_labels()
         preds, ids = data
-        ids = ids.to(th.int)
-        max_preds: Tensor = th.squeeze(th.argmax(preds, dim=1), dim=1)
+        ids = ids.to(torch.int)
+        max_preds: Tensor = torch.squeeze(torch.argmax(preds, dim=1), dim=1)
         self._weights_map[ids] = max_preds == classes_mask[ids]
 
-    """
-        This function returns:
-        a) a tensor of shape: (n_samples, k_classes) 
-        Where the n_samples is the number of input images 
-    """
     def predict(self, samples: Tensor) -> Tensor:
+        """
+            This function returns:
+            a) a tensor of shape: (n_samples, k_classes)
+            Where the n_samples is the number of input images
+        """
+        # Recall that predict here returns (k_classes, n_samples) shape tensors
+        #   if `samples` is just one image (not a batch)
+        #   but we want them transposed
         pred: Tensor = self._simple_learner.predict(samples)
-        if samples.dim() == 3: # the input is a single image
-            pred = th.transpose(pred, dim0=0, dim1=1)
+        if samples.dim() == 3:  # the input is a single image (CxHxW)
+            pred = torch.transpose(pred, dim0=0, dim1=1)
 
         return pred
 
