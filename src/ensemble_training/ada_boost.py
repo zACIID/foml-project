@@ -37,9 +37,9 @@ class AdaBoost:
 
     def _initialize_weights(self) -> Tensor:
         classes_mask: Tensor = self._dataset.get_labels()
-        weights: Tensor = th.zeros(classes_mask.shape[0])
 
         # TODO(pierluigi): capire se anche weights ha senso che sia messo nella cpu
+        weights: Tensor = th.zeros(classes_mask.shape[0])
 
         for lbl in Labels:
             class_cardinality: int = self._dataset.get_class_cardinality(label=lbl)
@@ -59,9 +59,6 @@ class AdaBoost:
     ) -> None:
         """Update is performed in-place"""
 
-        # TODO(pierluigi): shouldn't this be beta^weights_map??
-        #   because weight map is either 0 or 1 for each sample,
-        #   depending on if the prediction for such sample was correct
         # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
         #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
         weights.data[weak_learner_weights_map] *= weak_learner_beta
@@ -71,8 +68,7 @@ class AdaBoost:
             update_weights: bool = True,
             verbose: int = 0
     ) -> Callable[[Tensor], StrongLearner]:
-        # TODO(pierluigi): chieder a Biagio perche puo essere utile questo metodo che wrappa tutto in una funzione
-
+        # Returning a function here is maybe useful if multiprocessing is to be used
         def detached_start(weights: Tensor) -> StrongLearner:
             for era in range(self._n_eras):
                 weights = AdaBoost.normalize_weights(weights)

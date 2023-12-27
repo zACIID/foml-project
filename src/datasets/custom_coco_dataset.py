@@ -81,8 +81,14 @@ class CocoDataset(VisionDataset):
         False if labels are just integers
         """
 
+        self._labels_mask: torch.Tensor | None = None
+        """Tensor that contains, at position X, an integer representing the class of the X-th sample"""
+
         self._labels: torch.Tensor | None = None
-        """Tensor that contains, at position X, the class of the X-th sample"""
+        """
+        Tensor that contains, at position X, an integer or a probability distribution 
+        vector (see probability_distribution_labels) representing the class of the X-th sample
+        """
 
         self._weights: torch.Tensor | None = None
         """
@@ -104,6 +110,7 @@ class CocoDataset(VisionDataset):
 
         self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
         self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
+        self._labels_mask: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
 
         if self.probability_distribution_labels:
             self._labels: torch.Tensor = torch.zeros([len(self._img_ids), len(Labels)], dtype=torch.float32)
@@ -136,12 +143,13 @@ class CocoDataset(VisionDataset):
             adjusted_class_proportion = majority_class_proportion / class_proportion
             self._weights[img_id_indexes] = adjusted_class_proportion
 
+            self._labels_mask[img_id_indexes] = int(c)
             if self.probability_distribution_labels:
                 label_prob_distr = torch.zeros(len(Labels))
                 label_prob_distr[int(c)] = 1.0
                 self._labels[img_id_indexes] = label_prob_distr
             else:
-                self._labels[img_id_indexes] = int(c)
+                self._labels = torch.clone(self._labels_mask)
 
     def _get_img_ids_by_class(self) -> Dict[Labels, List[int]]:
         person_cat_ids = self._coco.getCatIds(supNms=["person"])
@@ -195,7 +203,7 @@ class CocoDataset(VisionDataset):
         Tensor that contains, at position X, the class of the X-th sample
         """
 
-        return self._labels
+        return self._labels_mask
 
 
 # Check out this article to see many different types of image augmentation
