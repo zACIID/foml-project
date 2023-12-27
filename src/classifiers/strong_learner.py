@@ -27,7 +27,7 @@ class StrongLearner:
         self._weak_learners: Sequence[WeakLearner] = weak_learners
         self._k_classes: int = k_classes
 
-        self._alphas: Tensor = th.ones(len(self._weak_learners), dtype=th.float32)
+        self._alphas: Tensor = th.ones(len(self._weak_learners), dtype=th.float32, device=self._device)
         self._initialize_alphas()
 
     def predict(self, images: Tensor) -> Tensor:
@@ -56,6 +56,9 @@ class StrongLearner:
     def _initialize_alphas(self) -> None:
         betas: Tensor = self._get_betas()
         self.alphas = th.log(1 / betas)
+
+        # Normalizing the alphas here means that we do not have to normalize
+        #   the predictions after applying them
         self.alphas = self.alphas / euclidean.norm(self.alphas, dim=0)
 
     def get_weak_learners(self) -> Sequence[WeakLearner]:
