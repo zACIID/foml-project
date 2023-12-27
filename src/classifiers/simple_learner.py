@@ -80,11 +80,7 @@ class SimpleLearner(nn.Module):
         self.train()
         for epoch in range(epochs):
             cum_loss = .0
-
-            from torch.utils.data import Subset
-            subset = Subset(dataset=dataset, indices=[x for x in range(48)])
-
-            for batch in DataLoader(subset, batch_size, shuffle=True):
+            for batch in DataLoader(dataset, batch_size, shuffle=True):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
 
