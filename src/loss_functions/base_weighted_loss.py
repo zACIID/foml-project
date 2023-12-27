@@ -3,7 +3,7 @@ from typing import Callable, Tuple
 import torch.nn as nn
 from torch import Tensor, tensor, cat
 
-ErrorMap = Tuple[Tensor, Tensor]
+PredictionMap = Tuple[Tensor, Tensor]
 """Tensors of (predictions, ids)"""
 
 
@@ -17,7 +17,8 @@ class WeightedBaseLoss(nn.Module):
     def forward(
             self,
             y_true: Tensor,
-            y_pred: Tensor, weights: Tensor = None,
+            y_pred: Tensor,
+            weights: Tensor = None,
             ids: Tensor = None,
             save: bool = False
     ) -> Tensor:
@@ -29,5 +30,5 @@ class WeightedBaseLoss(nn.Module):
 
         return self._sub_loss(y_true, y_pred, weights)
 
-    def get_error_map(self) -> ErrorMap:
+    def get_prediction_map(self) -> PredictionMap:
         return self._pred, self._ids

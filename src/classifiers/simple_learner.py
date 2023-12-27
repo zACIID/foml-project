@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from datasets.custom_coco_dataset import ItemType, BatchType
 from layers.fire_layer import FireLayer
-from loss_functions.base_weighted_loss import WeightedBaseLoss, ErrorMap
+from loss_functions.base_weighted_loss import WeightedBaseLoss, PredictionMap
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
@@ -68,7 +68,7 @@ class SimpleLearner(nn.Module):
             batch_size: int = 32,
             epochs: int = 10,
             verbose: int = 0
-    ) -> Tuple[ErrorMap, float]:
+    ) -> Tuple[PredictionMap, float]:
         adam_opt: Adam = Adam(self.parameters())
 
         loss = WeightedCrossEntropy() if loss is None else loss
@@ -80,7 +80,11 @@ class SimpleLearner(nn.Module):
         self.train()
         for epoch in range(epochs):
             cum_loss = .0
-            for batch in DataLoader(dataset, batch_size, shuffle=True):
+
+            from torch.utils.data import Subset
+            subset = Subset(dataset=dataset, indices=[x for x in range(48)])
+
+            for batch in DataLoader(subset, batch_size, shuffle=True):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
 
@@ -103,7 +107,7 @@ class SimpleLearner(nn.Module):
             if verbose >= 1:
                 print(f"\033[32mEpoch:{epoch} loss is {cum_loss}\033[0m")
 
-        return loss.get_error_map(), cum_loss
+        return loss.get_prediction_map(), cum_loss
 
     def predict(self, samples: Tensor) -> Tensor:
         """

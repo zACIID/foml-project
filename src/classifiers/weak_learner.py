@@ -6,7 +6,7 @@ from torch import Tensor, ones, argmax, int32
 
 from classifiers.simple_learner import SimpleLearner
 from datasets.custom_coco_dataset import CocoDataset
-from loss_functions.base_weighted_loss import ErrorMap
+from loss_functions.base_weighted_loss import PredictionMap
 
 
 class WeakLearner:
@@ -60,13 +60,13 @@ class WeakLearner:
         self._fit(epochs=epochs, verbose=verbose)
 
     def _fit(self, epochs: int = 5, verbose: int = 0) -> None:
-        training_result: Tuple[ErrorMap, float] = self._simple_learner.fit(
+        training_result: Tuple[PredictionMap, float] = self._simple_learner.fit(
             dataset=self._dataset,
             adaboost_weights=self._weights,
             epochs=epochs,
             verbose=verbose
         )
-        error_map, cum_loss = training_result
+        prediction_map, cum_loss = training_result
 
         # sigmoid used to make sure that the error rate is a number \in [0, 1]
         def sigmoid(x):
@@ -74,9 +74,9 @@ class WeakLearner:
 
         self._error_rate = cum_loss
         self._beta = sigmoid(self._error_rate)
-        self._update_weights_map(error_map)
+        self._update_weights_map(prediction_map)
 
-    def _update_weights_map(self, data: ErrorMap) -> None:
+    def _update_weights_map(self, data: PredictionMap) -> None:
         classes_mask: Tensor = self._dataset.get_labels()
         preds, ids = data
         ids = ids.to(torch.int)
