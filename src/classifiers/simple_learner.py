@@ -56,7 +56,8 @@ class SimpleLearner(nn.Module):
 
     def forward(self, batch: Tensor) -> Tensor:
         dim: int = 0 if batch.dim() == 3 else 1
-        batch_ft_map: Tensor = self._pipe_line(batch)
+        batch_ft_map: Tensor = self._layers(batch)
+
         return nn.functional.softmax(input=batch_ft_map, dim=dim)
 
     def fit(
