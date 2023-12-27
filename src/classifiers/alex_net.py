@@ -41,7 +41,7 @@ class AlexNet(nn.Module):
         else:
             self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self._pipe_line: nn.Sequential = nn.Sequential(
+        self._layers: nn.Sequential = nn.Sequential(
             OrderedDict([
                 ('conv1', nn.Conv2d(in_channels=3, out_channels=96,
                                     kernel_size=11, stride=4,
@@ -72,13 +72,15 @@ class AlexNet(nn.Module):
                 ('dense2', nn.Linear(in_features=4096, out_features=4096)),
                 ('dropout2', nn.Dropout(p=0.5)),
                 ('dense3', nn.Linear(in_features=4096, out_features=k_classes)),
-                ('softmax', nn.Softmax(dim=0))
             ])
         )
-        self._pipe_line = self._pipe_line.to(self._device)
+        self._layers = self._layers.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
-        return self._pipe_line(batch)
+        dim: int = 0 if batch.dim() == 3 else 1
+        batch_ft_map: Tensor = self._layers(batch)
+
+        return nn.functional.softmax(input=batch_ft_map, dim=dim)
 
     def fit(
             self,
@@ -123,7 +125,7 @@ class AlexNet(nn.Module):
             return self.__call__(samples)
 
     def get_modules(self) -> nn.Sequential:
-        return self._pipe_line
+        return self._layers
 
     def set_modules(self, new_modules: nn.Sequential) -> None:
-        self._pipe_line = new_modules
+        self._layers = new_modules
