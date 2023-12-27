@@ -86,21 +86,6 @@ class SimpleLearner(nn.Module):
                 y_pred: Tensor = self(x_batch)
                 mixed_weights: Tensor = adaboost_weights[ids] * wgt_batch
 
-                # TODO(pierluigi): qui quello che stavo cercando di fare era creare un vettore di probabilita partendo
-                #   da un y_batch formato di singole label
-                #   es. batch e un tensore [0, 1, 0, 1, ...] ma noi vogliamo che sia [[1, 0], [0, 1], [1, 0], ...),
-                #       ovvero che sia una distrib di probabilita
-                #   Stavo cercando di fare sta cosa usando pytorch ma sono impedito, la soluzione semplice e la seguente:
-                #       La classe CocoDataset accetta un parametero `prob_distr_labels` che segnala alla __get_item__
-                #       di ritornare un tensore di probabilita invece che la label corretta e basta
-
-                # labels are single numbers, but our target should be a probability vector
-                #   with the slot for the correct class set to 1
-                y_true_prob_distr = torch.zeros([y_pred.size(dim=0), y_pred.size(dim=1)])
-                # idxs = torch.stack((torch.tensor(list(range(y_batch.size(dim=0)))), y_batch), dim=1)
-                idxs = torch.stack((torch.tensor(list(range(y_batch.size(dim=0)))), y_batch))
-                y_true_prob_distr[idxs] = 1
-
                 batch_loss: Tensor = loss(
                     y_true=y_batch,
                     y_pred=y_pred,
@@ -119,13 +104,12 @@ class SimpleLearner(nn.Module):
 
         return loss.get_error_map(), cum_loss
 
-
-    """
-        This function either returns: 
-        a) a tensor of shape: (k_classes, 1) if the number of samples is 1
-        b) a tensor of shape: (n_samples, k_classes) otherwise
-    """
     def predict(self, samples: Tensor) -> Tensor:
+        """
+            This function either returns:
+            a) a tensor of shape: (k_classes, 1) if the number of samples is 1
+            b) a tensor of shape: (n_samples, k_classes) otherwise
+        """
         with no_grad():
             self.eval()  # Set the model to evaluation mode (if applicable)
 

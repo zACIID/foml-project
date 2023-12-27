@@ -45,6 +45,7 @@ class CocoDataset(VisionDataset):
             coco_dir: str,
             dataset_type: CocoDatasetTypes,
             img_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+            probability_distribution_labels: bool = False,
             device: torch.device = None
     ):
         """
@@ -53,6 +54,9 @@ class CocoDataset(VisionDataset):
         :param dataset_type: used to retrieve the correct images/annotations
         :param img_transform: A function/transform that takes in a torch.Tensor image
             and returns a transformed version. E.g, ``transforms.Compose(...)``
+        :param probability_distribution_labels: if True, returned labels are unit vecotrs representing
+            a probability distribution; if False, labels are just integers
+        :param device: device to use the tensors in
         """
         super().__init__(
             root=os.path.join(coco_dir, str(dataset_type)),
@@ -70,6 +74,12 @@ class CocoDataset(VisionDataset):
         self.dataset_type = dataset_type
 
         self._img_ids: List[int] | None = None
+
+        self.probability_distribution_labels = probability_distribution_labels
+        """
+        True if labels are a unit vector representing a probability distribution, 
+        False if labels are just integers
+        """
 
         self._labels: torch.Tensor | None = None
         """Tensor that contains, at position X, the class of the X-th sample"""
@@ -93,8 +103,12 @@ class CocoDataset(VisionDataset):
         self._coco = COCO(annotation_file=ann_file_path)
 
         self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
-        self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
         self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
+
+        if self.probability_distribution_labels:
+            self._labels: torch.Tensor = torch.zeros([len(self._img_ids), len(Labels)], dtype=torch.float32)
+        else:
+            self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
 
         img_ids_by_class = self._get_img_ids_by_class()
 
@@ -104,7 +118,7 @@ class CocoDataset(VisionDataset):
 
         majority_class_proportion = max(self._cardinality_by_class.values()) / len(self._img_ids)
 
-        # Init classes and weight tensors
+        # Init labels and weight tensors
         for c in Labels:
             c_img_ids = set(img_ids_by_class[c])
 
@@ -118,11 +132,16 @@ class CocoDataset(VisionDataset):
             )
             img_id_indexes = torch.tensor(list(img_id_indexes))
 
-            self._labels[img_id_indexes] = int(c)
-
             class_proportion = torch.numel(img_id_indexes) / len(self._img_ids)
             adjusted_class_proportion = majority_class_proportion / class_proportion
             self._weights[img_id_indexes] = adjusted_class_proportion
+
+            if self.probability_distribution_labels:
+                label_prob_distr = torch.zeros(len(Labels))
+                label_prob_distr[int(c)] = 1.0
+                self._labels[img_id_indexes] = label_prob_distr
+            else:
+                self._labels[img_id_indexes] = int(c)
 
     def _get_img_ids_by_class(self) -> Dict[Labels, List[int]]:
         person_cat_ids = self._coco.getCatIds(supNms=["person"])
@@ -158,7 +177,7 @@ class CocoDataset(VisionDataset):
         if self.transform is not None:
             image = self.transform(image)
 
-        # TODO(pierluigi): specify that now it is the index being returned and not an actual id
+        # NOTE: returning the index because ids might not be contigouous
         return index, image, label, sample_weight
 
     def __len__(self) -> int:
@@ -201,7 +220,8 @@ COCO_TRAIN_DATASET = CocoDataset(
             t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
     ),
-    device=_device
+    device=_device,
+    probability_distribution_labels=True
 )
 
 COCO_TEST_DATASET = CocoDataset(
@@ -214,5 +234,6 @@ COCO_TEST_DATASET = CocoDataset(
             t2.Normalize(mean=const.COCO_IMAGE_MEANS, std=const.COCO_IMAGE_STDS),
         ]
     ),
-    device=_device
+    device=_device,
+    probability_distribution_labels=True
 )
