@@ -16,3 +16,11 @@ COCO_IMAGE_MEANS: Tuple[float, float, float] = (119.8632, 113.9443, 103.9443)
 
 COCO_IMAGE_STDS: Tuple[float, float, float] = (59.4222, 58.1447, 59.0335)
 """Dataset, channel-wise standard deviations for MS COCO2017 dataset (training) images"""
+
+IMAGE_NET_IMAGE_MEANS: Tuple[float, float, float] = (123.6750, 116.2800, 103.5300)
+"""Dataset, channel-wise means for ImageNet dataset (training) images"""
+
+IMAGE_NET_IMAGE_STDS: Tuple[float, float, float] = (58.3950, 57.200, 57.3750)
+"""Dataset, channel-wise standard deviations for ImageNet dataset (training) images"""
+
+
