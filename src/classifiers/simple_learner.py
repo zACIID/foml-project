@@ -85,6 +85,12 @@ class SimpleLearner(nn.Module):
             for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
+                ids, x_batch, y_batch, wgt_batch = (
+                    ids.to(self._device),
+                    x_batch.to(self._device),
+                    y_batch.to(self._device),
+                    wgt_batch.to(self._device)
+                )
 
                 y_pred: Tensor = self(x_batch)
                 mixed_weights: Tensor = adaboost_weights[ids] * wgt_batch

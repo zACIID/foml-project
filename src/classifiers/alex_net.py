@@ -100,6 +100,12 @@ class AlexNet(nn.Module):
             for batch in DataLoader(dataset, batch_size, shuffle=True):
                 batch: BatchType
                 _, x_batch, y_batch, wgt_batch = batch
+                _, x_batch, y_batch, wgt_batch = (
+                    _.to(self._device),
+                    x_batch.to(self._device),
+                    y_batch.to(self._device),
+                    wgt_batch.to(self._device)
+                )
 
                 y_pred: Tensor = self(x_batch)
 

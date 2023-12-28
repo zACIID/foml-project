@@ -46,7 +46,6 @@ class CocoDataset(VisionDataset):
             dataset_type: CocoDatasetTypes,
             img_transform: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
             probability_distribution_labels: bool = False,
-            device: torch.device = None
     ):
         """
         :param coco_dir: root directory of the COCO dataset,
@@ -56,7 +55,6 @@ class CocoDataset(VisionDataset):
             and returns a transformed version. E.g, ``transforms.Compose(...)``
         :param probability_distribution_labels: if True, returned labels are unit vecotrs representing
             a probability distribution; if False, labels are just integers
-        :param device: device to use the tensors in
         """
         super().__init__(
             root=os.path.join(coco_dir, str(dataset_type)),
@@ -64,11 +62,6 @@ class CocoDataset(VisionDataset):
             transform=img_transform,
             target_transform=None
         )
-
-        if device is not None:
-            self._device = device
-        else:
-            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self._coco: COCO | None = None
         self.dataset_type = dataset_type
@@ -176,7 +169,6 @@ class CocoDataset(VisionDataset):
             # ensure that everything has 3 channels, because there are some grayscale images
             mode=ImageReadMode.RGB
         )
-        image.to(self._device)
 
         label = self._labels[index]
 
@@ -216,8 +208,6 @@ class CocoDataset(VisionDataset):
 # As of now, no data augmentation, just resizing images to make them usable by the models,
 #    and then normalizing them
 
-_device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 COCO_TRAIN_DATASET = CocoDataset(
     coco_dir=const.ROOT_COCO_DIR,
     dataset_type=CocoDatasetTypes.TRAIN_2017,
@@ -228,7 +218,6 @@ COCO_TRAIN_DATASET = CocoDataset(
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
-    device=_device,
     probability_distribution_labels=True
 )
 
@@ -242,6 +231,5 @@ COCO_TEST_DATASET = CocoDataset(
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
-    device=_device,
     probability_distribution_labels=True
 )
