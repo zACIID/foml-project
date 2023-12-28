@@ -73,7 +73,7 @@ class SimpleLearner(nn.Module):
         adam_opt: Adam = Adam(self.parameters())
 
         loss = WeightedCrossEntropy() if loss is None else loss
-        loss.to(device=self._device)
+        loss = loss.to(device=self._device)
         cum_loss: float = .0
 
         adaboost_weights = adaboost_weights.to(self._device)
