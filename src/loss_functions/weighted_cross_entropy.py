@@ -9,10 +9,7 @@ class WeightedCrossEntropy(WeightedBaseLoss):
 
         def sub_loss(y_true: Tensor, y_pred: Tensor, weights: Tensor) -> Tensor:
             cross_entropy: nn.CrossEntropyLoss = nn.CrossEntropyLoss()
-            loss = cross_entropy(y_true, y_pred)
-
-            # TODO(pierluigi): weighted loss significa che vogliamo moltiplicare la loss finale, non y_true prima di darlo in pasto alla loss, corretto?
-            weighted_loss = loss * weights
-            return weighted_loss
+            weighted_y_true: Tensor = y_true * (weights.unsqueeze(dim=1))
+            return cross_entropy(weighted_y_true, y_pred)
 
         super().__init__(sub_loss)
