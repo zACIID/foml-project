@@ -4,8 +4,8 @@ from typing import Type, Tuple
 import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
-from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader
+from torch.optim import SGD
+from torch.utils.data import Dataset, DataLoader, Subset
 from tqdm import tqdm
 
 from datasets.custom_coco_dataset import ItemType, BatchType
@@ -68,9 +68,11 @@ class SimpleLearner(nn.Module):
             loss: WeightedBaseLoss = None,
             batch_size: int = 32,
             epochs: int = 10,
-            verbose: int = 0
+            verbose: int = 0,
+            learning_rate: float = 0.05,
+            momentum: float = 0.5
     ) -> Tuple[PredictionMap, float]:
-        adam_opt: Adam = Adam(self.parameters())
+        optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum)
 
         loss = WeightedCrossEntropy() if loss is None else loss
         loss = loss.to(device=self._device)
@@ -82,6 +84,9 @@ class SimpleLearner(nn.Module):
         for epoch in range(epochs):
             cum_loss = .0
 
+            # subset = Subset(dataset, indices=list(range(64)))
+
+            # for batch in tqdm(DataLoader(subset, batch_size, shuffle=True)):
             for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
@@ -104,9 +109,9 @@ class SimpleLearner(nn.Module):
                 )
                 cum_loss += batch_loss.item()
 
-                adam_opt.zero_grad()  # initialize gradient to zero
+                optimizer.zero_grad()  # initialize gradient to zero
                 batch_loss.backward()  # compute gradient
-                adam_opt.step()  # backpropagation
+                optimizer.step()  # backpropagation
 
             if verbose >= 1:
                 print(f"\033[32mEpoch:{epoch} loss is {cum_loss}\033[0m")

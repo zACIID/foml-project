@@ -4,8 +4,9 @@ from typing import Type
 import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
-from torch.optim import Adam
-from torch.utils.data import Dataset, DataLoader
+from torch.optim import SGD
+from torch.utils.data import Dataset, DataLoader, Subset
+from tqdm import tqdm
 
 from datasets.custom_coco_dataset import ItemType, BatchType
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
@@ -88,16 +89,22 @@ class AlexNet(nn.Module):
             batch_size: int = 32,
             epochs: int = 10,
             loss: nn.Module = None,
-            verbose: int = 0
+            verbose: int = 0,
+            learning_rate: float = 1e-3,
+            momentum: float = 0.5
     ) -> float:
-        adam_opt: Adam = Adam(self.parameters())
+        optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum)
         loss = WeightedCrossEntropy() if loss is None else loss
         cum_loss: float = .0
 
         self.train()
         for epoch in range(epochs):
             cum_loss = .0
-            for batch in DataLoader(dataset, batch_size, shuffle=True):
+
+            # subset = Subset(dataset, indices=list(range(5000)))
+
+            # for batch in tqdm(DataLoader(subset, batch_size, shuffle=True)):
+            for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
                 batch: BatchType
                 _, x_batch, y_batch, wgt_batch = batch
                 _, x_batch, y_batch, wgt_batch = (
@@ -115,9 +122,9 @@ class AlexNet(nn.Module):
                 )
                 cum_loss += batch_loss.item()
 
-                adam_opt.zero_grad()  # initialize gradient to zero
+                optimizer.zero_grad()  # initialize gradient to zero
                 batch_loss.backward()  # compute gradient
-                adam_opt.step()  # backpropagation
+                optimizer.step()  # backpropagation
 
             if verbose >= 1:
                 print(f"\033[32mEpoch:{epoch} loss is {cum_loss}\033[0m")
