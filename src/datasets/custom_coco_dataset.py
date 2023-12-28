@@ -214,7 +214,7 @@ COCO_TRAIN_DATASET = CocoDataset(
     img_transform=t2.Compose(
         transforms=[
             t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
-            t2.ToDtype(torch.float32, scale=True),
+            t2.ToDtype(torch.float32),
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
@@ -227,7 +227,7 @@ COCO_TEST_DATASET = CocoDataset(
     img_transform=t2.Compose(
         transforms=[
             t2.Resize(size=const.INPUT_IMAGE_SIZE, antialias=True),
-            t2.ToDtype(torch.float32, scale=True),
+            t2.ToDtype(torch.float32),
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
