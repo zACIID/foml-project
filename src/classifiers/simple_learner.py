@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch import Tensor, no_grad
 from torch.optim import Adam
 from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
 
 from datasets.custom_coco_dataset import ItemType, BatchType
 from layers.fire_layer import FireLayer
@@ -80,7 +81,8 @@ class SimpleLearner(nn.Module):
         self.train()
         for epoch in range(epochs):
             cum_loss = .0
-            for batch in DataLoader(dataset, batch_size, shuffle=True):
+
+            for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
 
