@@ -8,8 +8,10 @@ class WeightedCrossEntropy(WeightedBaseLoss):
     def __init__(self):
 
         def sub_loss(y_true: Tensor, y_pred: Tensor, weights: Tensor) -> Tensor:
-            cross_entropy: nn.CrossEntropyLoss = nn.CrossEntropyLoss()
-            weighted_y_true: Tensor = y_true * (weights.unsqueeze(dim=1))
-            return cross_entropy(weighted_y_true, y_pred)
+            cross_entropy: nn.CrossEntropyLoss = nn.CrossEntropyLoss(reduction='none')
+            loss = cross_entropy(y_pred, y_true)
+            loss = loss * weights
+            loss = loss.mean()
+            return loss
 
         super().__init__(sub_loss)
