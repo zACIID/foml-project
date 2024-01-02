@@ -98,18 +98,18 @@ class AlexNet(nn.Module):
         optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum, weight_decay=5e-03)
         optimizer = Adam(self.parameters(), lr=learning_rate,)#weight_decay=5e-03)
         loss = WeightedCrossEntropy() if loss is None else loss
-        cum_loss: float = .0
+        avg_loss: float = .0
 
         self.train()
         for epoch in range(epochs):
-            cum_loss = .0
+            avg_loss = .0
 
-            subset = Subset(dataset, indices=list(range(5000)))
+            subset = Subset(dataset, indices=list(range(100000)))
 
             # for batch in tqdm(DataLoader(subset, batch_size, shuffle=True)):
-            # for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
+            for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
             # for batch in DataLoader(dataset, batch_size, shuffle=True):
-            for batch in DataLoader(subset, batch_size, shuffle=True):
+            # for batch in DataLoader(subset, batch_size, shuffle=True):
                 batch: BatchType
                 _, x_batch, y_batch, wgt_batch = batch
                 _, x_batch, y_batch, wgt_batch = (
@@ -126,17 +126,17 @@ class AlexNet(nn.Module):
                     # TODO rivedere il tipo della loss
                     y_true=y_batch, y_pred=y_pred, weights=wgt_batch
                 )
-                cum_loss += x_batch.shape[0] * batch_loss.item()
+                avg_loss += (x_batch.shape[0] / len(dataset)) * batch_loss.item()
 
                 optimizer.zero_grad()  # initialize gradient to zero
                 batch_loss.backward()  # compute gradient
                 optimizer.step()  # backpropagation
 
             if verbose >= 1:
-                print(f"\033[32mEpoch:{epoch} loss is {cum_loss}\033[0m")
+                print(f"\033[32mEpoch:{epoch} loss is {avg_loss}\033[0m")
                 pass
 
-        return cum_loss
+        return avg_loss
 
     def predict(self, samples: Tensor) -> Tensor:
         with no_grad():
