@@ -4,11 +4,12 @@ from typing import Type
 import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
-from torch.optim import SGD, Adam
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from classifiers.base import TrainingResults
 from datasets.custom_coco_dataset import ItemType, BatchType
+from loss_functions.base_weighted_loss import WeightedBaseLoss
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
@@ -79,37 +80,28 @@ class AlexNet(nn.Module):
         self._layers = self._layers.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
-        dim: int = 0 if batch.dim() == 3 else 1
         batch_ft_map: Tensor = self._layers(batch)
 
-        # return nn.functional.softmax(input=batch_ft_map, dim=dim)
         return batch_ft_map
 
     def fit(
             self,
-            dataset: Dataset[ItemType],
-            batch_size: int = 32,
+            data_loader: DataLoader[ItemType],
+            optimizer: torch.optim.Optimizer,
+            loss: WeightedBaseLoss = None,
             epochs: int = 10,
-            loss: nn.Module = None,
             verbose: int = 0,
-            learning_rate: float = 1e-3,
-            momentum: float = 0.5
-    ) -> float:
-        optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum, weight_decay=5e-03)
-        optimizer = Adam(self.parameters(), lr=learning_rate,)#weight_decay=5e-03)
+    ) -> TrainingResults:
+        # optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum, weight_decay=5e-03)
+        # optimizer = Adam(self.parameters(), lr=learning_rate,) #weight_decay=5e-03)
         loss = WeightedCrossEntropy() if loss is None else loss
-        avg_loss: float = .0
 
         self.train()
+        results = TrainingResults()
         for epoch in range(epochs):
             avg_loss = .0
 
-            subset = Subset(dataset, indices=list(range(100000)))
-
-            # for batch in tqdm(DataLoader(subset, batch_size, shuffle=True)):
-            for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
-            # for batch in DataLoader(dataset, batch_size, shuffle=True):
-            # for batch in DataLoader(subset, batch_size, shuffle=True):
+            for batch in tqdm(data_loader):
                 batch: BatchType
                 _, x_batch, y_batch, wgt_batch = batch
                 _, x_batch, y_batch, wgt_batch = (
@@ -121,22 +113,23 @@ class AlexNet(nn.Module):
 
                 y_pred: Tensor = self(x_batch)
 
-                # wgts = torch.ones(x_batch.shape[0], device=self._device)
                 batch_loss: Tensor = loss(
-                    # TODO rivedere il tipo della loss
-                    y_true=y_batch, y_pred=y_pred, weights=wgt_batch
+                    y_true=y_batch,
+                    y_pred=y_pred,
+                    weights=wgt_batch
                 )
-                avg_loss += (x_batch.shape[0] / len(dataset)) * batch_loss.item()
+                avg_loss += (x_batch.shape[0] / len(data_loader)) * batch_loss.item()
 
                 optimizer.zero_grad()  # initialize gradient to zero
                 batch_loss.backward()  # compute gradient
                 optimizer.step()  # backpropagation
 
+            results.train_loss.append(avg_loss)
             if verbose >= 1:
                 print(f"\033[32mEpoch:{epoch} loss is {avg_loss}\033[0m")
                 pass
 
-        return avg_loss
+        return results
 
     def predict(self, samples: Tensor) -> Tensor:
         with no_grad():
@@ -146,7 +139,6 @@ class AlexNet(nn.Module):
 
             dim: int = 0 if samples.dim() == 3 else 1
             return nn.functional.softmax(input=raw_pred, dim=dim)
-
 
     def get_modules(self) -> nn.Sequential:
         return self._layers

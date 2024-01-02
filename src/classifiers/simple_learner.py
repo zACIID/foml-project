@@ -1,19 +1,26 @@
+import dataclasses
 from collections import OrderedDict
-from typing import Type, Tuple
+from typing import Type
 
 import torch
 import torch.nn as nn
 from torch import Tensor, no_grad
-from torch.optim import SGD
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from classifiers.base import TrainingResults
 from datasets.custom_coco_dataset import ItemType, BatchType
 from layers.fire_layer import FireLayer
 from loss_functions.base_weighted_loss import WeightedBaseLoss, PredictionMap
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
+@dataclasses.dataclass
+class WeakLearnerTrainingResults(TrainingResults):
+    prediction_map: PredictionMap | None = None
+
+
+# TODO(pierluigi): maybe merge this and the WeakLearner classes into one since they are dependent on each other
 class SimpleLearner(nn.Module):
     def __init__(
             self,
@@ -63,31 +70,24 @@ class SimpleLearner(nn.Module):
 
     def fit(
             self,
-            dataset: Dataset[ItemType],
-            adaboost_weights: Tensor,
+            data_loader: DataLoader[ItemType],
+            optimizer: torch.optim.Optimizer,
+            loss_weights: Tensor,
             loss: WeightedBaseLoss = None,
-            batch_size: int = 32,
             epochs: int = 10,
             verbose: int = 0,
-            learning_rate: float = 0.05,
-            momentum: float = 0.5
-    ) -> Tuple[PredictionMap, float]:
-        optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum)
-
+    ) -> WeakLearnerTrainingResults:
         loss = WeightedCrossEntropy() if loss is None else loss
         loss = loss.to(device=self._device)
-        cum_loss: float = .0
 
-        adaboost_weights = adaboost_weights.to(self._device)
+        loss_weights = loss_weights.to(self._device)
 
         self.train()
+        results = WeakLearnerTrainingResults()
         for epoch in range(epochs):
-            cum_loss = .0
+            avg_loss = .0
 
-            # subset = Subset(dataset, indices=list(range(64)))
-
-            # for batch in tqdm(DataLoader(subset, batch_size, shuffle=True)):
-            for batch in tqdm(DataLoader(dataset, batch_size, shuffle=True)):
+            for batch in tqdm(data_loader):
                 batch: BatchType
                 ids, x_batch, y_batch, wgt_batch = batch
                 ids, x_batch, y_batch, wgt_batch = (
@@ -98,31 +98,33 @@ class SimpleLearner(nn.Module):
                 )
 
                 y_pred: Tensor = self(x_batch)
-                mixed_weights: Tensor = adaboost_weights[ids] * wgt_batch
 
+                weights: Tensor = loss_weights[ids] * wgt_batch
                 batch_loss: Tensor = loss(
                     y_true=y_batch,
                     y_pred=y_pred,
-                    weights=mixed_weights,
+                    weights=weights,
                     ids=ids,
                     save=True if epoch == epochs - 1 else False
                 )
-                cum_loss += batch_loss.item()
+                avg_loss += (x_batch.shape[0] / len(data_loader)) * batch_loss.item()
 
                 optimizer.zero_grad()  # initialize gradient to zero
                 batch_loss.backward()  # compute gradient
                 optimizer.step()  # backpropagation
 
+            results.train_loss.append(avg_loss)
             if verbose >= 1:
-                print(f"\033[32mEpoch:{epoch} loss is {cum_loss}\033[0m")
+                print(f"\033[32mEpoch:{epoch} loss is {avg_loss}\033[0m")
 
-        return loss.get_prediction_map(), cum_loss
+        results.prediction_map = loss.get_prediction_map()
+        return results
 
     def predict(self, samples: Tensor) -> Tensor:
         """
-            This function either returns:
-            a) a tensor of shape: (k_classes, 1) if the number of samples is 1
-            b) a tensor of shape: (n_samples, k_classes) otherwise
+        This function either returns:
+        a) a tensor of shape: (k_classes, 1) if the number of samples is 1
+        b) a tensor of shape: (n_samples, k_classes) otherwise
         """
         with no_grad():
             self.eval()  # Set the model to evaluation mode (if applicable)

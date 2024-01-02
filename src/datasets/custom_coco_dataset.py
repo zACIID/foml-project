@@ -90,7 +90,10 @@ class CocoDataset(VisionDataset):
             of minority samples.
         """
 
-        self._cardinality_by_class: Dict[Labels, int] = {}
+        self._cardinality_by_class: torch.Tensor | None = None
+        """
+        Tensor that contains, at position X, the cardinality of the X-th class (label).
+        """
 
     def load(self):
         """
@@ -98,6 +101,7 @@ class CocoDataset(VisionDataset):
             so that it is ready to provide data samples
         :return:
         """
+
         ann_file_path = os.path.join(self.root, "..", "annotations", f"instances_{self.dataset_type}.json")
         self._coco = COCO(annotation_file=ann_file_path)
 
@@ -112,11 +116,16 @@ class CocoDataset(VisionDataset):
 
         img_ids_by_class = self._get_img_ids_by_class()
 
-        self._cardinality_by_class = {
-            c: len(ids) for c, ids in img_ids_by_class.items()
-        }
+        self._cardinality_by_class: torch.Tensor = torch.tensor(
+            list(
+                sorted(
+                    [(c, len(ids)) for c, ids in img_ids_by_class.items()],
+                    key=lambda x: x[0]
+                )
+            )
+        )
 
-        majority_class_proportion = max(self._cardinality_by_class.values()) / len(self._img_ids)
+        majority_class_proportion = self._cardinality_by_class.max() / len(self._img_ids)
 
         # Init labels and weight tensors
         for c in Labels:
@@ -177,7 +186,7 @@ class CocoDataset(VisionDataset):
         if self.transform is not None:
             image = self.transform(image)
 
-        # NOTE: returning the index because ids might not be contigouous
+        # NOTE: returning the index because ids might not be contiguous
         return index, image, label, sample_weight
 
     def __len__(self) -> int:
@@ -187,8 +196,12 @@ class CocoDataset(VisionDataset):
         """
         return len(self._img_ids)
 
-    def get_class_cardinality(self, label: Labels) -> int:
-        return self._cardinality_by_class[label]
+    def get_class_cardinalities(self) -> torch.Tensor:
+        """
+        Tensor that contains, at position X, the class of the X-th sample
+        """
+
+        return self._cardinality_by_class
 
     def get_labels(self) -> torch.Tensor:
         """

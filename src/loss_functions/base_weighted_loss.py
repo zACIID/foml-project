@@ -3,6 +3,7 @@ from typing import Callable, Tuple
 import torch.nn as nn
 from torch import Tensor, tensor, cat
 
+
 PredictionMap = Tuple[Tensor, Tensor]
 """Tensors of (predictions, ids)"""
 

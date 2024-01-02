@@ -1,26 +1,26 @@
-from typing import Callable, List
+from typing import List, Sequence, Tuple
 
 import torch
 import torch as th
 from torch import Tensor, sum
+from torch.utils.data import DataLoader
 
-from classifiers.strong_learner import StrongLearner
-from classifiers.weak_learner import WeakLearner
-from datasets.custom_coco_dataset import CocoDataset, Labels
-
-"""
-    Class wrapping all the functionalities needed to make a training algorithm based
-    on an ensemble approach
-"""
+from classifiers.simple_learner import WeakLearnerTrainingResults
+from loss_functions.base_weighted_loss import WeightedBaseLoss
+from src.classifiers.strong_learner import StrongLearner
+from src.classifiers.weak_learner import WeakLearner
+from src.datasets.custom_coco_dataset import Labels, ItemType
 
 
 class AdaBoost:
+    """
+        Class wrapping all the functionalities needed to make a training algorithm based
+        on an ensemble approach
+    """
+
     def __init__(
             self,
-            dataset: CocoDataset,
-            n_eras: int,
             n_classes: int,
-            weak_learner_epochs: int = 10,
             device: torch.device = None
     ):
         if device is not None:
@@ -28,78 +28,87 @@ class AdaBoost:
         else:
             self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self._n_eras: int = n_eras
-        self._dataset: CocoDataset = dataset
-        self._n_classes: int = n_classes
-        self._weak_learner_epochs: int = weak_learner_epochs
+        self._k_classes: int = n_classes
         self._weak_learners: List[WeakLearner] = []
-        self._weights: Tensor = self._initialize_weights()
 
-    def _initialize_weights(self) -> Tensor:
-        classes_mask: Tensor = self._dataset.get_labels()
+        self._weights: Tensor | None = None
+        """
+        Weights associated to each sample of the previous training run. 
+        None if fit() has never been called
+        """
 
-        # TODO(pierluigi): capire se anche weights ha senso che sia messo nella cpu
-        weights: Tensor = th.zeros(classes_mask.shape[0])
-
-        for lbl in Labels:
-            class_cardinality: int = self._dataset.get_class_cardinality(label=lbl)
-            weights[classes_mask == int(lbl)] = 1 / (2 * class_cardinality)
-
-        return weights
-
-    @staticmethod
-    def normalize_weights(weights: Tensor) -> Tensor:
-        return weights / sum(weights)
-
-    @staticmethod
-    def update_weights(
-            weights: Tensor,
-            weak_learner_beta: float,
-            weak_learner_weights_map: Tensor
-    ) -> None:
-        """Update is performed in-place"""
-
-        # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
-        #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
-        weights.data[weak_learner_weights_map] *= weak_learner_beta
-
-    def start_generator(
+    def fit(
             self,
-            update_weights: bool = True,
-            verbose: int = 0
-    ) -> Callable[[Tensor], StrongLearner]:
-        # Returning a function here is maybe useful if multiprocessing is to be used
-        def detached_start(weights: Tensor) -> StrongLearner:
-            for era in range(self._n_eras):
-                weights = AdaBoost.normalize_weights(weights)
+            eras: int,
+            data_loader: DataLoader[ItemType],
+            classes_mask: Tensor,
+            class_cardinalities: Tensor,
+            weak_learner_optimizer: torch.optim.Optimizer,
+            weak_learner_loss: WeightedBaseLoss = None,
+            weak_learner_epochs: int = 5,
+            verbose: int = 0,
+    ) -> Tuple[StrongLearner, Sequence[WeakLearnerTrainingResults]]:
+        self._weights = _initialize_weights(classes_mask=classes_mask, class_cardinalities=class_cardinalities)
 
-                weak_learner: WeakLearner = WeakLearner(
-                    dataset=self._dataset,
-                    weights=self._weights,
-                    epochs=self._weak_learner_epochs,
-                    verbose=verbose,
-                    device=self._device
-                )
+        weak_learner_results: List[WeakLearnerTrainingResults] = []
+        for era in range(eras):
+            normalized_weights = _normalize_weights(self._weights)
 
-                if update_weights:
-                    AdaBoost.update_weights(
-                        weights=weights,
-                        weak_learner_beta=weak_learner.get_beta(),
-                        weak_learner_weights_map=weak_learner.get_weights_map()
-                    )
+            weak_learner: WeakLearner = WeakLearner(
+                weights=normalized_weights,
+                device=self._device
+            )
 
-                self._weak_learners.append(weak_learner)
+            results = weak_learner.fit(
+                data_loader=data_loader,
+                classes_mask=classes_mask,
+                optimizer=weak_learner_optimizer,
+                loss=weak_learner_loss,
+                epochs=weak_learner_epochs,
+                verbose=verbose
+            )
 
-                if verbose > 1:
-                    print(f"\033[31mEras left: {self._n_eras - (era + 1)}\033[0m")
+            _update_weights_(
+                weights=normalized_weights,
+                weak_learner_beta=weak_learner.get_beta(),
+                weak_learner_weights_map=weak_learner.get_weights_map()
+            )
 
-            return StrongLearner(weak_learners=self._weak_learners, device=self._device)
+            self._weak_learners.append(weak_learner)
+            weak_learner_results.append(results)
 
-        return detached_start
+            if verbose > 1:
+                print(f"\033[31mEras left: {eras - (era + 1)}\033[0m")
 
-    def start(self, verbose: int = 0) -> StrongLearner:
-        start: Callable[[Tensor], StrongLearner] = self.start_generator(True, verbose)
-        return start(self._weights)
+        return StrongLearner(weak_learners=self._weak_learners, device=self._device), weak_learner_results
 
     def get_weights(self) -> Tensor:
         return self._weights
+
+
+def _initialize_weights(classes_mask: Tensor, class_cardinalities: Tensor) -> Tensor:
+    # TODO(pierluigi): capire se anche weights ha senso che sia messo nella cpu
+    weights: Tensor = th.zeros(classes_mask.shape[0])
+
+    for lbl in Labels:
+        cardinality = class_cardinalities[lbl]
+        weights[classes_mask == int(lbl)] = 1 / (2 * cardinality)
+
+    return weights
+
+
+def _normalize_weights(weights: Tensor) -> Tensor:
+    return weights / sum(weights)
+
+
+def _update_weights_(
+        weights: Tensor,
+        weak_learner_beta: float,
+        weak_learner_weights_map: Tensor
+) -> None:
+    """Update is performed in-place"""
+
+    # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
+    #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
+    weights.data[weak_learner_weights_map] *= weak_learner_beta
+
