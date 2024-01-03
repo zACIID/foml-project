@@ -254,7 +254,7 @@ class SimpleLearner(nn.Module):
         a) a tensor of shape: (k_classes, 1) if the number of samples is 1
         b) a tensor of shape: (n_samples, k_classes) otherwise
         """
-        dim: int = 0 if batch.dim() == 3 else 1
+        dim: int = 0 if samples.dim() == 3 else 1
         with no_grad():
             self.eval()  # Set the model to evaluation mode (if applicable)
 
