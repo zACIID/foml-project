@@ -157,5 +157,6 @@ def _update_weights_(
 
     # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
     #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
+    # Uei piers se guardi il metodo get_weights() in WeakLearner ritorniamo self._weights.detach() quindi non ci sono problemi in teoria
     weights.data[weak_learner_weights_map] *= weak_learner_beta
 
