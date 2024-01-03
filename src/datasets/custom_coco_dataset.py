@@ -107,12 +107,12 @@ class CocoDataset(VisionDataset):
 
         self._img_ids: List[int] = list(sorted(self._coco.imgs.keys()))
         self._weights: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.float32)
-        self._labels_mask: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
+        self._labels_mask: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.long)
 
         if self.probability_distribution_labels:
             self._labels: torch.Tensor = torch.zeros([len(self._img_ids), len(Labels)], dtype=torch.float32)
         else:
-            self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.int8)
+            self._labels: torch.Tensor = torch.zeros(len(self._img_ids), dtype=torch.long)
 
         img_ids_by_class = self._get_img_ids_by_class()
 
@@ -231,7 +231,7 @@ COCO_TRAIN_DATASET = CocoDataset(
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
-    probability_distribution_labels=True
+    probability_distribution_labels=False
 )
 
 COCO_TEST_DATASET = CocoDataset(
@@ -244,5 +244,5 @@ COCO_TEST_DATASET = CocoDataset(
             t2.Normalize(mean=const.IMAGE_NET_IMAGE_MEANS, std=const.IMAGE_NET_IMAGE_STDS),
         ]
     ),
-    probability_distribution_labels=True
+    probability_distribution_labels=False
 )
