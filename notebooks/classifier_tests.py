@@ -139,23 +139,41 @@ import src.visualization.classification as vis
 #     )
 
 # %%
+from copy import deepcopy
 import torch.utils.data as data
 from sklearn.model_selection import train_test_split
 
 train_dataset = coco.COCO_TRAIN_DATASET
+val_dataset = deepcopy(train_dataset)
+
 train_dataset.load()
+val_dataset.load()
+
+# Use not augmented images for validation
+val_dataset.transform = coco.COCO_TEST_DATASET.transform
+val_dataset.transforms = coco.COCO_TEST_DATASET.transforms
+
 labels_mask = train_dataset.get_labels().cpu().detach().numpy()
 
-train_split_idxs, val_split_idxs, _, _ = train_test_split(np.arange(0, len(train_dataset)), train_size=9000, test_size=3000, stratify=labels_mask)
+# %%
+train_split_idxs, val_split_idxs = train_test_split(
+    np.arange(0, len(train_dataset)), 
+    train_size=100000, 
+    test_size=15000, 
+    stratify=labels_mask, 
+    random_state=RND_SEED
+)
 train_subset = data.Subset(train_dataset, indices=train_split_idxs)
-val_subset = data.Subset(train_dataset, indices=val_split_idxs)
+val_subset = data.Subset(val_dataset, indices=val_split_idxs)
 
 # %%
 alex_net = ax.AlexNet()
 train_val_results = alex_net.fit_and_validate(
-    train_data_loader=data.DataLoader(train_subset, batch_size=256, num_workers=4),
-    validation_data_loader=data.DataLoader(val_subset, batch_size=256, num_workers=4),
-    optimizer=torch.optim.Adam(alex_net.parameters(), lr=0.00025),
-    epochs=100,
+    train_data_loader=data.DataLoader(train_subset, batch_size=128, num_workers=12, pin_memory=True, prefetch_factor=8),
+    validation_data_loader=data.DataLoader(val_subset, batch_size=128, num_workers=12, pin_memory=True, prefetch_factor=8),
+    optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
+    epochs=200,
     verbose=1
 )
+
+# %%
