@@ -250,7 +250,7 @@ class AlexNet(nn.Module):
             self.eval()  # Set the model to evaluation mode (if applicable)
 
             raw_pred = self.__call__(samples)
-            return nn.functional.softmax(input=raw_pred, dim=dim)
+            return torch.argmax(nn.functional.softmax(input=raw_pred, dim=dim), dim=dim)
 
     def get_modules(self) -> nn.Sequential:
         return self._layers

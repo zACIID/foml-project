@@ -30,17 +30,13 @@ class StrongLearner:
         self._alphas: Tensor = th.ones(len(self._weak_learners), dtype=th.float32, device=self._device)
         self._initialize_alphas()
 
+    def __call__(self, images: Tensor):
+        return self.predict(images)
+
     def predict(self, images: Tensor) -> Tensor:
         Pred: Tensor = self._get_preds(images)
         result_mat: Tensor = Pred @ self._alphas
         return th.argmax(result_mat, dim=0)
-
-    def _get_betas(self) -> Tensor:
-        betas: Tensor = th.tensor([], dtype=th.float32)
-        for wk_l in self._weak_learners:
-            betas = th.cat((betas, th.tensor([wk_l.get_beta()])))
-
-        return betas.to(self._device)
 
     def _get_preds(self, samples: Tensor) -> Tensor:
         col_size: int = samples.shape[0] if samples.dim() > 3 else 1
@@ -52,6 +48,13 @@ class StrongLearner:
             pred_mat[idx] = wk_l.predict(samples)
 
         return th.transpose(pred_mat, dim0=0, dim1=2).to(self._device)
+
+    def _get_betas(self) -> Tensor:
+        betas: Tensor = th.tensor([], dtype=th.float32)
+        for wk_l in self._weak_learners:
+            betas = th.cat((betas, th.tensor([wk_l.get_beta()])))
+
+        return betas.to(self._device)
 
     def _initialize_alphas(self) -> None:
         betas: Tensor = self._get_betas()
