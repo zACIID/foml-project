@@ -226,7 +226,7 @@ COCO_TRAIN_DATASET = CocoDataset(
     dataset_type=CocoDatasetTypes.TRAIN_2017,
     img_transform=t2.Compose(
         transforms=[
-            t2.Resize(size=(256, 256), antialias=True),
+            t2.Resize(size=const.ALEX_NET_RESIZE_SIZE, antialias=True),
             t2.CenterCrop(size=const.INPUT_IMAGE_SIZE),
             t2.RandomRotation(degrees=(0, 50)),
             t2.RandomHorizontalFlip(p=0.5),
