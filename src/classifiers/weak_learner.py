@@ -79,7 +79,6 @@ class WeakLearner:
         self._update_params(
             training_results=training_result,
             classes_mask=classes_mask,
-            dataset_length=len(data_loader)
         )
 
         return training_result
@@ -117,7 +116,6 @@ class WeakLearner:
         self._update_params(
             training_results=train_validate_result,
             classes_mask=classes_mask,
-            dataset_length=len(train_data_loader)
         )
 
         return train_validate_result
@@ -126,7 +124,6 @@ class WeakLearner:
             self,
             training_results: WeakLearnerTrainingResults,
             classes_mask: Tensor,
-            dataset_length: int
     ):
         # sigmoid used to make sure that the error rate is a number \in [0, 1]
         def sigmoid(x):
@@ -134,9 +131,11 @@ class WeakLearner:
 
         # Take loss related just to last epoch,
         #   because we need to use it with the prediction map from only the last epoch
-        cumulative_loss = training_results.avg_train_loss[-1] * dataset_length
-        self._error_rate = cumulative_loss
-        self._beta = sigmoid(self._error_rate)
+        # Also, just take avg loss instead of cumulative because loss is unbounded,
+        #   which saturates the sigmoid
+        last_epoch_avg_loss = training_results.avg_train_loss[-1]
+        self._error_rate = last_epoch_avg_loss
+        self._beta = min(sigmoid(self._error_rate), 0.9)
 
         self._update_weights_map(classes_mask=classes_mask, data=training_results.last_epoch_prediction_map)
 
