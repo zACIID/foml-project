@@ -1,6 +1,6 @@
 import math
+from typing import Callable, Iterator
 
-import numpy as np
 import torch
 from torch import Tensor, ones
 from torch.utils.data import DataLoader
@@ -16,7 +16,7 @@ class WeakLearner:
             weights: Tensor,
             k_classes: int = 2,
             device: torch.device = None
-    ):
+        ):
         """
         :param weights: AdaBoost weights - vector of dataset length that weighs the loss of each instance
         """
@@ -88,7 +88,7 @@ class WeakLearner:
             train_data_loader: DataLoader[ItemType],
             validation_data_loader: DataLoader[ItemType],
             classes_mask: Tensor,
-            optimizer: torch.optim.Optimizer,
+            optimizer_builder: Callable[[Iterator[torch.nn.Parameter]], torch.optim.Optimizer],
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
@@ -97,16 +97,17 @@ class WeakLearner:
         :param train_data_loader:
         :param validation_data_loader:
         :param classes_mask: tensor where the i-th entry contains the class label for the i-th sample
-        :param optimizer:
+        :param optimizer_builder:
         :param loss:
         :param verbose:
         :param epochs:
         """
+        classes_mask = classes_mask.to(self._device)
 
         train_validate_result = self._simple_learner.fit_and_validate(
             train_data_loader=train_data_loader,
             validation_data_loader=validation_data_loader,
-            optimizer=optimizer,
+            optimizer=optimizer_builder(self._simple_learner.parameters()),
             loss=loss,
             train_loss_weights=self._weights,
             epochs=epochs,
@@ -141,8 +142,13 @@ class WeakLearner:
 
     def _update_weights_map(self, classes_mask: Tensor, data: PredictionMap) -> None:
         preds, ids = data
+
+        # Recall that preds are the raw logits for each sample,
+        #   so we need to pass them through softmax before doing argmax
+        preds = torch.nn.functional.softmax(input=preds, dim=1)
         ids = ids.to(torch.int)
-        max_preds: Tensor = torch.squeeze(torch.argmax(preds, dim=1), dim=1)
+
+        max_preds: Tensor = torch.argmax(preds, dim=1)
         self._weights_map[ids] = max_preds == classes_mask[ids]
 
     def predict(self, samples: Tensor) -> Tensor:
