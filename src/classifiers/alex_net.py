@@ -181,15 +181,15 @@ class AlexNet(nn.Module):
             y_logits: Tensor = self(x_batch)
 
             weights: Tensor = wgt_batch
-            batch_loss: Tensor = loss(
+            batch_avg_loss: Tensor = loss(
                 y_true=y_batch,
                 y_pred=y_logits,
                 weights=weights,
             )
-            avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
+            avg_loss += (batch_length / len(data_loader.dataset)) * batch_avg_loss.item()
 
             optimizer.zero_grad()  # initialize gradient to zero
-            batch_loss.backward()  # compute gradient
+            batch_avg_loss.backward()  # compute gradient
             optimizer.step()  # backpropagation
 
             # torch.max(x, dim=1) returns a tuple (values, indices)
@@ -197,7 +197,7 @@ class AlexNet(nn.Module):
             predictions: Tensor
 
             # noinspection PyUnresolvedReferences
-            accuracy += (predictions == y_batch).sum().item() / batch_length
+            accuracy += (predictions == y_batch).sum().item() / len(data_loader.dataset)
 
         prediction_map = loss.get_prediction_map()
 
@@ -228,19 +228,19 @@ class AlexNet(nn.Module):
                 y_logits: Tensor = self(x_batch)
 
                 weights: Tensor = wgt_batch
-                batch_loss: Tensor = loss(
+                batch_avg_loss: Tensor = loss(
                     y_true=y_batch,
                     y_pred=y_logits,
                     weights=weights,
                 )
-                avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
+                avg_loss += (batch_length / len(data_loader.dataset)) * batch_avg_loss.item()
 
                 # torch.max(x, dim=1) returns a tuple (values, indices)
                 scores, predictions = torch.max(y_logits, dim=1)
                 predictions: Tensor
 
                 # noinspection PyUnresolvedReferences
-                accuracy += (predictions == y_batch).sum().item() / batch_length
+                accuracy += (predictions == y_batch).sum().item() / len(data_loader.dataset)
 
         return avg_loss, accuracy
 

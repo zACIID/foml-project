@@ -17,7 +17,7 @@ from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 @dataclasses.dataclass
 class WeakLearnerTrainingResults(TrainingResults):
-    prediction_map: PredictionMap | None = None
+    last_epoch_prediction_map: PredictionMap | None = None
 
 
 @dataclasses.dataclass
@@ -93,7 +93,7 @@ class SimpleLearner(nn.Module):
                 save_prediction_map=True if epoch == epochs - 1 else False,
             )
             results.avg_train_loss.append(avg_loss_train)
-            results.prediction_map = prediction_map
+            results.last_epoch_prediction_map = prediction_map
 
             if verbose >= 1:
                 print(f"\033[32mEpoch:{epoch} train loss is {avg_loss_train}\033[0m")
@@ -126,7 +126,7 @@ class SimpleLearner(nn.Module):
             )
             results.avg_train_loss.append(avg_loss_train)
             results.train_accuracy.append(accuracy_train)
-            results.prediction_map = prediction_map
+            results.last_epoch_prediction_map = prediction_map
 
             avg_loss_val, accuracy_val = self._validation_epoch(
                 data_loader=validation_data_loader,
@@ -181,17 +181,17 @@ class SimpleLearner(nn.Module):
             y_logits: Tensor = self(x_batch)
 
             weights: Tensor = loss_weights[ids] * wgt_batch
-            batch_loss: Tensor = loss(
+            batch_avg_loss: Tensor = loss(
                 y_true=y_batch,
                 y_pred=y_logits,
                 weights=weights,
                 ids=ids,
                 save=save_prediction_map
             )
-            avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
+            avg_loss += (batch_length / len(data_loader.dataset)) * batch_avg_loss.item()
 
             optimizer.zero_grad()  # initialize gradient to zero
-            batch_loss.backward()  # compute gradient
+            batch_avg_loss.backward()  # compute gradient
             optimizer.step()  # backpropagation
 
             # torch.max(x, dim=1) returns a tuple (values, indices)
@@ -199,7 +199,7 @@ class SimpleLearner(nn.Module):
             predictions: Tensor
 
             # noinspection PyUnresolvedReferences
-            accuracy += (predictions == y_batch).sum().item() / batch_length
+            accuracy += (predictions == y_batch).sum().item() / len(data_loader.dataset)
 
         prediction_map = loss.get_prediction_map()
 
@@ -230,21 +230,21 @@ class SimpleLearner(nn.Module):
                 y_logits: Tensor = self(x_batch)
 
                 weights: Tensor = wgt_batch
-                batch_loss: Tensor = loss(
+                batch_avg_loss: Tensor = loss(
                     y_true=y_batch,
                     y_pred=y_logits,
                     weights=weights,
                     ids=ids,
                     save=False
                 )
-                avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
+                avg_loss += (batch_length / len(data_loader.dataset)) * batch_avg_loss.item()
 
                 # torch.max(x, dim=1) returns a tuple (values, indices)
                 scores, predictions = torch.max(y_logits, dim=1)
                 predictions: Tensor
 
                 # noinspection PyUnresolvedReferences
-                accuracy += (predictions == y_batch).sum().item() / batch_length
+                accuracy += (predictions == y_batch).sum().item() / len(data_loader.dataset)
 
         return avg_loss, accuracy
 
