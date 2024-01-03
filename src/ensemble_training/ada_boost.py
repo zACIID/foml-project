@@ -85,7 +85,7 @@ class AdaBoost:
     def fit_and_validate(
             self,
             eras: int,
-            data_loader: DataLoader[ItemType],
+            train_data_loader: DataLoader[ItemType],
             validation_data_loader: DataLoader[ItemType],
             classes_mask: Tensor,
             class_cardinalities: Tensor,
@@ -106,7 +106,7 @@ class AdaBoost:
             )
 
             results = weak_learner.fit_and_validate(
-                train_data_loader=data_loader,
+                train_data_loader=train_data_loader,
                 validation_data_loader=validation_data_loader,
                 classes_mask=classes_mask,
                 optimizer=weak_learner_optimizer,
