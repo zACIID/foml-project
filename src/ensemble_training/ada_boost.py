@@ -5,7 +5,7 @@ import torch as th
 from torch import Tensor, sum
 from torch.utils.data import DataLoader
 
-from classifiers.simple_learner import WeakLearnerTrainingResults
+from classifiers.simple_learner import WeakLearnerTrainingResults, WeakLearnerTrainingValidationResults
 from loss_functions.base_weighted_loss import WeightedBaseLoss
 from src.classifiers.strong_learner import StrongLearner
 from src.classifiers.weak_learner import WeakLearner
@@ -61,6 +61,53 @@ class AdaBoost:
 
             results = weak_learner.fit(
                 data_loader=data_loader,
+                classes_mask=classes_mask,
+                optimizer=weak_learner_optimizer,
+                loss=weak_learner_loss,
+                epochs=weak_learner_epochs,
+                verbose=verbose
+            )
+
+            _update_weights_(
+                weights=normalized_weights,
+                weak_learner_beta=weak_learner.get_beta(),
+                weak_learner_weights_map=weak_learner.get_weights_map()
+            )
+
+            self._weak_learners.append(weak_learner)
+            weak_learner_results.append(results)
+
+            if verbose > 1:
+                print(f"\033[31mEras left: {eras - (era + 1)}\033[0m")
+
+        return StrongLearner(weak_learners=self._weak_learners, device=self._device), weak_learner_results
+
+    def fit_and_validate(
+            self,
+            eras: int,
+            data_loader: DataLoader[ItemType],
+            validation_data_loader: DataLoader[ItemType],
+            classes_mask: Tensor,
+            class_cardinalities: Tensor,
+            weak_learner_optimizer: torch.optim.Optimizer,
+            weak_learner_loss: WeightedBaseLoss = None,
+            weak_learner_epochs: int = 5,
+            verbose: int = 0,
+    ) -> Tuple[StrongLearner, Sequence[WeakLearnerTrainingValidationResults]]:
+        self._weights = _initialize_weights(classes_mask=classes_mask, class_cardinalities=class_cardinalities)
+
+        weak_learner_results: List[WeakLearnerTrainingValidationResults] = []
+        for era in range(eras):
+            normalized_weights = _normalize_weights(self._weights)
+
+            weak_learner: WeakLearner = WeakLearner(
+                weights=normalized_weights,
+                device=self._device
+            )
+
+            results = weak_learner.fit_and_validate(
+                train_data_loader=data_loader,
+                validation_data_loader=validation_data_loader,
                 classes_mask=classes_mask,
                 optimizer=weak_learner_optimizer,
                 loss=weak_learner_loss,

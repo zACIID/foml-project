@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Type
+from typing import Type, Tuple
 
 import torch
 import torch.nn as nn
@@ -7,9 +7,9 @@ from torch import Tensor, no_grad
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from classifiers.base import TrainingResults
+from classifiers.base import TrainingResults, TrainingValidationResults
 from datasets.custom_coco_dataset import ItemType, BatchType
-from loss_functions.base_weighted_loss import WeightedBaseLoss
+from loss_functions.base_weighted_loss import WeightedBaseLoss, PredictionMap
 from loss_functions.weighted_cross_entropy import WeightedCrossEntropy
 
 
@@ -88,48 +88,171 @@ class AlexNet(nn.Module):
             self,
             data_loader: DataLoader[ItemType],
             optimizer: torch.optim.Optimizer,
+            loss_weights: Tensor,
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
     ) -> TrainingResults:
-        # optimizer = SGD(self.parameters(), lr=learning_rate, momentum=momentum, weight_decay=5e-03)
-        # optimizer = Adam(self.parameters(), lr=learning_rate,) #weight_decay=5e-03)
         loss = WeightedCrossEntropy() if loss is None else loss
+        loss = loss.to(device=self._device)
+        loss_weights = loss_weights.to(self._device)
 
-        self.train()
         results = TrainingResults()
         for epoch in range(epochs):
-            avg_loss = .0
+            avg_loss_train, accuracy_train, prediction_map = self._train_epoch(
+                data_loader=data_loader,
+                optimizer=optimizer,
+                loss_weights=loss_weights,
+                loss=loss,
+            )
+            results.avg_train_loss.append(avg_loss_train)
+            results.prediction_map = prediction_map
+
+            if verbose >= 1:
+                print(f"\033[32mEpoch:{epoch} train loss is {avg_loss_train}\033[0m")
+                print(f"\033[32mEpoch:{epoch} train accuracy is {accuracy_train}\033[0m")
+
+        return results
+
+    def fit_and_validate(
+            self,
+            train_data_loader: DataLoader[ItemType],
+            validation_data_loader: DataLoader[ItemType],
+            optimizer: torch.optim.Optimizer,
+            train_loss_weights: Tensor,
+            loss: WeightedBaseLoss = None,
+            epochs: int = 10,
+            verbose: int = 0,
+    ) -> TrainingValidationResults:
+        loss = WeightedCrossEntropy() if loss is None else loss
+        loss = loss.to(device=self._device)
+        train_loss_weights = train_loss_weights.to(self._device)
+
+        results = TrainingValidationResults()
+        for epoch in range(epochs):
+            avg_loss_train, accuracy_train, prediction_map = self._train_epoch(
+                data_loader=train_data_loader,
+                optimizer=optimizer,
+                loss_weights=train_loss_weights,
+                loss=loss,
+            )
+            results.avg_train_loss.append(avg_loss_train)
+            results.train_accuracy.append(accuracy_train)
+            results.prediction_map = prediction_map
+
+            avg_loss_val, accuracy_val = self._validation_epoch(
+                data_loader=validation_data_loader,
+                loss=loss,
+            )
+            results.avg_validation_loss.append(avg_loss_val)
+            results.validation_accuracy.append(accuracy_val)
+
+            # TODO(pierluigi): Maybe create a shared function in the base module,
+            #   especially for AdaBoost stuff that is closely related and tends to just
+            #   forward stuff to Simplelearner?
+
+            if verbose >= 1:
+                print(f"\033[32mEpoch:{epoch} train loss is {avg_loss_train}\033[0m")
+                print(f"\033[32mEpoch:{epoch} validation loss is {avg_loss_val}\033[0m")
+                print(f"\033[32mEpoch:{epoch} train accuracy is {accuracy_train}\033[0m")
+                print(f"\033[32mEpoch:{epoch} validation accuracy is {accuracy_val}\033[0m")
+
+        return results
+
+    def _train_epoch(
+            self,
+            data_loader: DataLoader[ItemType],
+            optimizer: torch.optim.Optimizer,
+            loss_weights: Tensor,
+            loss: WeightedBaseLoss,
+    ) -> Tuple[float, float, PredictionMap | None]:
+        """
+        :param data_loader:
+        :param optimizer:
+        :param loss_weights:
+        :param loss:
+        :return: (average loss per sample, accuracy, prediction map from loss function)
+        """
+
+        avg_loss = .0
+        accuracy = .0
+
+        for batch in tqdm(data_loader):
+            batch: BatchType
+            ids, x_batch, y_batch, wgt_batch = batch
+            ids, x_batch, y_batch, wgt_batch = (
+                ids.to(self._device),
+                x_batch.to(self._device),
+                y_batch.to(self._device),
+                wgt_batch.to(self._device)
+            )
+            batch_length = x_batch.shape[0]
+
+            y_logits: Tensor = self(x_batch)
+
+            weights: Tensor = loss_weights[ids] * wgt_batch
+            batch_loss: Tensor = loss(
+                y_true=y_batch,
+                y_pred=y_logits,
+                weights=weights,
+            )
+            avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
+
+            optimizer.zero_grad()  # initialize gradient to zero
+            batch_loss.backward()  # compute gradient
+            optimizer.step()  # backpropagation
+
+            # torch.max(x, dim=1) returns a tuple (values, indices)
+            scores, predictions = torch.max(y_logits, dim=1)
+            predictions: Tensor
+
+            # noinspection PyUnresolvedReferences
+            accuracy += (predictions == y_batch).sum().item() / batch_length
+
+        prediction_map = loss.get_prediction_map()
+
+        return avg_loss, accuracy, prediction_map
+
+    def _validation_epoch(
+            self,
+            data_loader: DataLoader[ItemType],
+            loss: WeightedBaseLoss,
+    ):
+        avg_loss = .0
+        accuracy = .0
+
+        self.eval()
+        with torch.no_grad():
 
             for batch in tqdm(data_loader):
                 batch: BatchType
-                _, x_batch, y_batch, wgt_batch = batch
-                _, x_batch, y_batch, wgt_batch = (
-                    _.to(self._device),
+                ids, x_batch, y_batch, wgt_batch = batch
+                ids, x_batch, y_batch, wgt_batch = (
+                    ids.to(self._device),
                     x_batch.to(self._device),
                     y_batch.to(self._device),
                     wgt_batch.to(self._device)
                 )
+                batch_length = x_batch.shape[0]
 
-                y_pred: Tensor = self(x_batch)
+                y_logits: Tensor = self(x_batch)
 
+                weights: Tensor = wgt_batch
                 batch_loss: Tensor = loss(
                     y_true=y_batch,
-                    y_pred=y_pred,
-                    weights=wgt_batch
+                    y_pred=y_logits,
+                    weights=weights,
                 )
-                avg_loss += (x_batch.shape[0] / len(data_loader)) * batch_loss.item()
+                avg_loss += (batch_length / len(data_loader)) * batch_loss.item()
 
-                optimizer.zero_grad()  # initialize gradient to zero
-                batch_loss.backward()  # compute gradient
-                optimizer.step()  # backpropagation
+                # torch.max(x, dim=1) returns a tuple (values, indices)
+                scores, predictions = torch.max(y_logits, dim=1)
+                predictions: Tensor
 
-            results.train_loss.append(avg_loss)
-            if verbose >= 1:
-                print(f"\033[32mEpoch:{epoch} loss is {avg_loss}\033[0m")
-                pass
+                # noinspection PyUnresolvedReferences
+                accuracy += (predictions == y_batch).sum().item() / batch_length
 
-        return results
+        return avg_loss, accuracy
 
     def predict(self, samples: Tensor) -> Tensor:
         with no_grad():
