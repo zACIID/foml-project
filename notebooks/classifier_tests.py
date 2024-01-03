@@ -14,6 +14,7 @@
 # ---
 
 # %%
+import numpy as np
 # %load_ext autoreload
 
 import torch
@@ -40,7 +41,7 @@ dataset.load()
 # ## AdaBoost Tests
 
 # %%
-ada_boost = ada.AdaBoost(dataset=dataset, n_eras=1, n_classes=2)
+# ada_boost = ada.AdaBoost(dataset=dataset, n_eras=1, n_classes=2)
 
 # %% [raw]
 # strong_learner = ada_boost.start(verbose=4)
@@ -59,26 +60,26 @@ ada_boost = ada.AdaBoost(dataset=dataset, n_eras=1, n_classes=2)
 # ## AlexNet Tests
 
 # %%
-y_true = torch.tensor([[0, 1.0], [1.0, 0]])
-y_pred = torch.tensor([[0.2, -0.3], [0.1, -0.4]])
+# y_true = torch.tensor([[0, 1.0], [1.0, 0]])
+# y_pred = torch.tensor([[0.2, -0.3], [0.1, -0.4]])
+# 
+# cross_entropy: torch.nn.CrossEntropyLoss = torch.nn.CrossEntropyLoss(reduction='none')
+# x = cross_entropy(y_pred, y_true)
+# x = x.mean()
+# print(x)
 
-cross_entropy: torch.nn.CrossEntropyLoss = torch.nn.CrossEntropyLoss(reduction='none')
-x = cross_entropy(y_pred, y_true)
-x = x.mean()
-print(x)
-
-# %% is_executing=true
-alex_net = ax.AlexNet(
-    act_fun=torch.nn.SiLU
-)
-alex_net.fit(
-    dataset=dataset,
-    verbose=5,
-    learning_rate=0.0005,
-    momentum=0.9,
-    batch_size=128,
-    epochs=100
-)
+# %%
+# alex_net = ax.AlexNet(
+#     act_fun=torch.nn.SiLU
+# )
+# alex_net.fit(
+#     dataset=dataset,
+#     verbose=5,
+#     learning_rate=0.0005,
+#     momentum=0.9,
+#     batch_size=128,
+#     epochs=100
+# )
 
 # %% [markdown]
 # ## TODO Presentazione
@@ -128,91 +129,33 @@ alex_net.fit(
 # %%
 import src.visualization.classification as vis
 
-for batch in dataset:
-    ids, images, labels, weights = batch
-    y_pred = model.predict()
-    vis.confusion_matrix(
-        y_true=labels,
-        y_pred=y_pred,
-        figsize=(12,12)
-    )
+# for batch in dataset:
+#     ids, images, labels, weights = batch
+#     y_pred = model.predict()
+#     vis.confusion_matrix(
+#         y_true=labels,
+#         y_pred=y_pred,
+#         figsize=(12,12)
+#     )
 
 # %%
-def train_epoch(model,device,dataloader,loss_fn,optimizer):
-    train_loss,train_correct=0.0,0
-    model.train()
-    for images, labels in dataloader:
+import torch.utils.data as data
+from sklearn.model_selection import train_test_split
 
-        images,labels = images.to(device),labels.to(device)
-        optimizer.zero_grad()
-        output = model(images)
-        loss = loss_fn(output,labels)
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item() * images.size(0)
-        scores, predictions = torch.max(output.data, 1)
-        train_correct += (predictions == labels).sum().item()
+train_dataset = coco.COCO_TRAIN_DATASET
+train_dataset.load()
+labels_mask = train_dataset.get_labels().cpu().detach().numpy()
 
-    return train_loss,train_correct
-
-def valid_epoch(model,device,dataloader,loss_fn):
-    valid_loss, val_correct = 0.0, 0
-    model.eval()
-    with torch.no_grad():
-        for images, labels in dataloader:
-
-            images,labels = images.to(device),labels.to(device)
-            output = model(images)
-            loss=loss_fn(output,labels)
-            valid_loss+=loss.item()*images.size(0)
-            scores, predictions = torch.max(output.data,1)
-            val_correct+=(predictions == labels).sum().item()
-
-    return valid_loss,val_correct
+train_split_idxs, val_split_idxs, _, _ = train_test_split(np.arange(0, len(train_dataset)), train_size=9000, test_size=3000, stratify=labels_mask)
+train_subset = data.Subset(train_dataset, indices=train_split_idxs)
+val_subset = data.Subset(train_dataset, indices=val_split_idxs)
 
 # %%
-from typing import List
-
-@dataclass.dataclass
-class TrainValidationResults:
-    """
-    Collection of train and validation results.
-    Each item is a list of values, one for each epoch
-    """
-
-    train_loss: List[float]
-    validation_loss: List[float]
-    train_accuracy: List[float]
-    validation_accuracy: List[float]
-
-
-history = TrainValidationResults()
-
-for fold, (train_idx,val_idx) in enumerate(splits.split(np.arange(len(dataset)))):
-
-    print('Fold {}'.format(fold + 1))
-
-    train_sampler = SubsetRandomSampler(train_idx)
-    test_sampler = SubsetRandomSampler(val_idx)
-    train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_sampler)
-    test_loader = DataLoader(dataset, batch_size=batch_size, sampler=test_sampler)
-
-    model = ConvNet()
-    model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=0.002)
-
-    for epoch in range(num_epochs):
-        train_loss, train_correct=train_epoch(model,device,train_loader,criterion,optimizer)
-        test_loss, test_correct=valid_epoch(model,device,test_loader,criterion)
-
-        train_loss = train_loss / len(train_loader.sampler)
-        train_acc = train_correct / len(train_loader.sampler) * 100
-        test_loss = test_loss / len(test_loader.sampler)
-        test_acc = test_correct / len(test_loader.sampler) * 100
-
-        print("Epoch:{}/{} AVG Training Loss:{:.3f} AVG Test Loss:{:.3f} AVG Training Acc {:.2f} % AVG Test Acc {:.2f} %".format(epoch + 1, num_epochs, train_loss, test_loss, train_acc, test_acc))
-        history['train_loss'].append(train_loss)
-        history['test_loss'].append(test_loss)
-        history['train_acc'].append(train_acc)
-        history['test_acc'].append(test_acc)
-
+alex_net = ax.AlexNet()
+train_val_results = alex_net.fit_and_validate(
+    train_data_loader=data.DataLoader(train_subset, batch_size=256, num_workers=4),
+    validation_data_loader=data.DataLoader(val_subset, batch_size=256, num_workers=4),
+    optimizer=torch.optim.Adam(alex_net.parameters(), lr=0.00025),
+    epochs=100,
+    verbose=1
+)
