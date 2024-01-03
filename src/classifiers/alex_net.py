@@ -80,9 +80,7 @@ class AlexNet(nn.Module):
         self._layers = self._layers.to(self._device)
 
     def forward(self, batch: Tensor) -> Tensor:
-        batch_ft_map: Tensor = self._layers(batch)
-
-        return batch_ft_map
+        return self._layers(batch)
 
     def fit(
             self,
@@ -247,12 +245,11 @@ class AlexNet(nn.Module):
         return avg_loss, accuracy
 
     def predict(self, samples: Tensor) -> Tensor:
+        dim: int = 0 if samples.dim() == 3 else 1
         with no_grad():
             self.eval()  # Set the model to evaluation mode (if applicable)
 
             raw_pred = self.__call__(samples)
-
-            dim: int = 0 if samples.dim() == 3 else 1
             return nn.functional.softmax(input=raw_pred, dim=dim)
 
     def get_modules(self) -> nn.Sequential:
