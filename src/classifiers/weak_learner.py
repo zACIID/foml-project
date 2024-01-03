@@ -132,13 +132,13 @@ class WeakLearner:
         def sigmoid(x):
             return 1 / (1 + math.exp(-x))
 
-        # TODO(pierluigi): ask biagio or check adaboost paper because I dont remember, what should error rate be? cumulative loss over every epoch or just over the last epoch?
-        # Multiplying by dataloader length because loss is the per-sample average of each epoch
-        cumulative_loss = (np.array(training_results.avg_train_loss) * dataset_length).sum(axis=0)
+        # Take loss related just to last epoch,
+        #   because we need to use it with the prediction map from only the last epoch
+        cumulative_loss = training_results.avg_train_loss[-1] * dataset_length
         self._error_rate = cumulative_loss
         self._beta = sigmoid(self._error_rate)
 
-        self._update_weights_map(classes_mask=classes_mask, data=training_results.prediction_map)
+        self._update_weights_map(classes_mask=classes_mask, data=training_results.last_epoch_prediction_map)
 
     def _update_weights_map(self, classes_mask: Tensor, data: PredictionMap) -> None:
         preds, ids = data
