@@ -8,6 +8,9 @@ RND_SEED = 777
 ROOT_COCO_DIR = os.path.abspath(os.path.join(__file__, "..", "..", "..", "data"))
 """Directory where COCO dataset is stored/downloaded"""
 
+ALEX_NET_RESIZE_SIZE: Tuple[int, int] = (256, 256)
+"""AlexNet first resizes images to this dimension, and then takes a center crop of lower size (224x224)"""
+
 INPUT_IMAGE_SIZE: Tuple[int, int] = (224, 224)
 """Input size of models in this project"""
 
