@@ -88,21 +88,18 @@ class AlexNet(nn.Module):
             self,
             data_loader: DataLoader[ItemType],
             optimizer: torch.optim.Optimizer,
-            loss_weights: Tensor,
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
     ) -> TrainingResults:
         loss = WeightedCrossEntropy() if loss is None else loss
         loss = loss.to(device=self._device)
-        loss_weights = loss_weights.to(self._device)
 
         results = TrainingResults()
         for epoch in range(epochs):
             avg_loss_train, accuracy_train, prediction_map = self._train_epoch(
                 data_loader=data_loader,
                 optimizer=optimizer,
-                loss_weights=loss_weights,
                 loss=loss,
             )
             results.avg_train_loss.append(avg_loss_train)
@@ -119,21 +116,18 @@ class AlexNet(nn.Module):
             train_data_loader: DataLoader[ItemType],
             validation_data_loader: DataLoader[ItemType],
             optimizer: torch.optim.Optimizer,
-            train_loss_weights: Tensor,
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
     ) -> TrainingValidationResults:
         loss = WeightedCrossEntropy() if loss is None else loss
         loss = loss.to(device=self._device)
-        train_loss_weights = train_loss_weights.to(self._device)
 
         results = TrainingValidationResults()
         for epoch in range(epochs):
             avg_loss_train, accuracy_train, prediction_map = self._train_epoch(
                 data_loader=train_data_loader,
                 optimizer=optimizer,
-                loss_weights=train_loss_weights,
                 loss=loss,
             )
             results.avg_train_loss.append(avg_loss_train)
@@ -163,13 +157,11 @@ class AlexNet(nn.Module):
             self,
             data_loader: DataLoader[ItemType],
             optimizer: torch.optim.Optimizer,
-            loss_weights: Tensor,
             loss: WeightedBaseLoss,
     ) -> Tuple[float, float, PredictionMap | None]:
         """
         :param data_loader:
         :param optimizer:
-        :param loss_weights:
         :param loss:
         :return: (average loss per sample, accuracy, prediction map from loss function)
         """
@@ -190,7 +182,7 @@ class AlexNet(nn.Module):
 
             y_logits: Tensor = self(x_batch)
 
-            weights: Tensor = loss_weights[ids] * wgt_batch
+            weights: Tensor = wgt_batch
             batch_loss: Tensor = loss(
                 y_true=y_batch,
                 y_pred=y_logits,
