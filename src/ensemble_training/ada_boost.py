@@ -1,14 +1,27 @@
+import dataclasses
 from typing import List, Sequence, Tuple, Callable, Iterator
 
 import torch
 from torch import Tensor, sum
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from classifiers.simple_learner import WeakLearnerTrainingResults, WeakLearnerTrainingValidationResults
+from classifiers.simple_learner import WeakLearnerValidationResults, WeakLearnerTrainingResults
 from loss_functions.base_weighted_loss import WeightedBaseLoss
 from src.classifiers.strong_learner import StrongLearner
 from src.classifiers.weak_learner import WeakLearner
-from src.datasets.custom_coco_dataset import ItemType
+from src.datasets.custom_coco_dataset import ItemType, BatchType
+
+
+@dataclasses.dataclass
+class StrongLearnerTrainingResults:
+    weak_learner_results: List[WeakLearnerTrainingResults] | List[WeakLearnerValidationResults] = dataclasses.field(default_factory=lambda: [])
+    train_accuracy: List[float] = dataclasses.field(default_factory=lambda: [])
+
+
+@dataclasses.dataclass
+class StrongLearnerValidationResults(StrongLearnerTrainingResults):
+    val_accuracy: List[float] = dataclasses.field(default_factory=lambda: [])
 
 
 class AdaBoost:
@@ -46,20 +59,20 @@ class AdaBoost:
             weak_learner_loss: WeightedBaseLoss = None,
             weak_learner_epochs: int = 5,
             verbose: int = 0,
-    ) -> Tuple[StrongLearner, Sequence[WeakLearnerTrainingResults]]:
+    ) -> Tuple[StrongLearner, StrongLearnerTrainingResults]:
         self._weights = _initialize_weights(
             actual_train_dataset_length=actual_train_dataset_length,
             device=self._device
         )
 
-        weak_learner_results: List[WeakLearnerTrainingResults] = []
+        strong_learner_results = StrongLearnerTrainingResults()
         for era in range(eras):
             weak_learner: WeakLearner = WeakLearner(
                 weights=self._weights,
                 device=self._device
             )
 
-            results = weak_learner.fit(
+            res = weak_learner.fit(
                 data_loader=data_loader,
                 classes_mask=classes_mask,
                 optimizer=weak_learner_optimizer,
@@ -75,12 +88,17 @@ class AdaBoost:
             )
 
             self._weak_learners.append(weak_learner)
-            weak_learner_results.append(results)
+            strong_learner_results.weak_learner_results.append(res)
+
+            strong_learner = StrongLearner(weak_learners=self._weak_learners, device=self._device)
+            accuracy = _test_results(data_loader=data_loader, model=strong_learner)
+            strong_learner_results.train_accuracy.append(accuracy)
 
             if verbose > 1:
-                print(f"\033[31mEras left: {eras - (era + 1)}\033[0m")
+                print(f"StrongLearner accuracy: {accuracy}")
+                print(f"Eras left: {eras - (era + 1)}")
 
-        return StrongLearner(weak_learners=self._weak_learners, device=self._device), weak_learner_results
+        return StrongLearner(weak_learners=self._weak_learners, device=self._device), strong_learner_results
 
     def fit_and_validate(
             self,
@@ -93,20 +111,20 @@ class AdaBoost:
             weak_learner_loss: WeightedBaseLoss = None,
             weak_learner_epochs: int = 5,
             verbose: int = 0,
-    ) -> Tuple[StrongLearner, Sequence[WeakLearnerTrainingValidationResults]]:
+    ) -> Tuple[StrongLearner, StrongLearnerValidationResults]:
         self._weights = _initialize_weights(
             actual_train_dataset_length=actual_train_dataset_length,
             device=self._device
         )
 
-        weak_learner_results: List[WeakLearnerTrainingValidationResults] = []
+        strong_learner_results = StrongLearnerValidationResults()
         for era in range(eras):
             weak_learner: WeakLearner = WeakLearner(
                 weights=self._weights,
                 device=self._device
             )
 
-            results = weak_learner.fit_and_validate(
+            res = weak_learner.fit_and_validate(
                 train_data_loader=train_data_loader,
                 validation_data_loader=validation_data_loader,
                 classes_mask=classes_mask,
@@ -123,12 +141,20 @@ class AdaBoost:
             )
 
             self._weak_learners.append(weak_learner)
-            weak_learner_results.append(results)
+            strong_learner_results.weak_learner_results.append(res)
+
+            strong_learner = StrongLearner(weak_learners=self._weak_learners, device=self._device)
+            train_accuracy = _test_results(data_loader=train_data_loader, model=strong_learner)
+            val_accuracy = _test_results(data_loader=validation_data_loader, model=strong_learner)
+            strong_learner_results.train_accuracy.append(train_accuracy)
+            strong_learner_results.val_accuracy.append(val_accuracy)
 
             if verbose > 1:
-                print(f"\033[31mEras left: {eras - (era + 1)}\033[0m")
+                print(f"StrongLearner train accuracy: {train_accuracy}")
+                print(f"StrongLearner validation accuracy: {val_accuracy}")
+                print(f"Eras left: {eras - (era + 1)}")
 
-        return StrongLearner(weak_learners=self._weak_learners, device=self._device), weak_learner_results
+        return StrongLearner(weak_learners=self._weak_learners, device=self._device), strong_learner_results
 
     def get_weights(self) -> Tensor:
         return self._weights
@@ -164,6 +190,22 @@ def _update_weights_(
 
     # TODO(pierluigi): I think in place update has to access the data field else the following error occurs:
     #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
-    # Uei piers se guardi il metodo get_weights() in WeakLearner ritorniamo self._weights.detach() quindi non ci sono problemi in teoria
     weights.data[weak_learner_weights_map] *= weak_learner_beta
 
+def _test_results(
+        data_loader: torch.utils.data.DataLoader[ItemType],
+        model: StrongLearner
+):
+    accuracy = .0
+
+    for batch in tqdm(data_loader):
+        batch: BatchType
+        _, x_batch, y_batch, _ = batch
+        x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
+
+        predictions: torch.Tensor = model(x_batch)
+
+        # noinspection PyUnresolvedReferences
+        accuracy += (predictions == y_batch).sum().item() / len(data_loader.dataset)
+
+    return accuracy

@@ -21,7 +21,7 @@ class WeakLearnerTrainingResults(TrainingResults):
 
 
 @dataclasses.dataclass
-class WeakLearnerTrainingValidationResults(TrainingValidationResults, WeakLearnerTrainingResults):
+class WeakLearnerValidationResults(TrainingValidationResults, WeakLearnerTrainingResults):
     pass
 
 
@@ -110,12 +110,12 @@ class SimpleLearner(nn.Module):
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
-    ) -> WeakLearnerTrainingValidationResults:
+    ) -> WeakLearnerValidationResults:
         loss = WeightedCrossEntropy() if loss is None else loss
         loss = loss.to(device=self._device)
         train_loss_weights = train_loss_weights.to(self._device)
 
-        results = WeakLearnerTrainingValidationResults()
+        results = WeakLearnerValidationResults()
         for epoch in range(epochs):
             avg_loss_train, accuracy_train, prediction_map = self._train_epoch(
                 data_loader=train_data_loader,

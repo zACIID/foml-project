@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, ones
 from torch.utils.data import DataLoader
 
-from classifiers.simple_learner import SimpleLearner, WeakLearnerTrainingResults, WeakLearnerTrainingValidationResults
+from classifiers.simple_learner import SimpleLearner, WeakLearnerTrainingResults, WeakLearnerValidationResults
 from datasets.custom_coco_dataset import ItemType
 from loss_functions.base_weighted_loss import PredictionMap, WeightedBaseLoss
 
@@ -92,7 +92,7 @@ class WeakLearner:
             loss: WeightedBaseLoss = None,
             epochs: int = 10,
             verbose: int = 0,
-    ) -> WeakLearnerTrainingValidationResults:
+    ) -> WeakLearnerValidationResults:
         """
         :param train_data_loader:
         :param validation_data_loader:
