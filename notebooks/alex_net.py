@@ -77,8 +77,9 @@ _, class_cardinalities = torch.unique(classes_mask[train_split_idxs], sorted=Tru
 
 # %%
 MODELS_DIR = os.path.join(ROOT_COCO_DIR, "models")
-ALEX_NET_PATH = os.path.join(MODELS_DIR, "alex_net_state_dict.pth")
-ALEX_NET_RESULTS_PATH = os.path.join(MODELS_DIR, "alex_net_train_val_results.ser")
+ALEX_NET_TRAIN_VAL_PATH = os.path.join(MODELS_DIR, "alex_net-train_val.pth")
+ALEX_NET_TRAIN_VAL_RESULTS_PATH = os.path.join(MODELS_DIR, "alex_net_train_val_results.ser")
+ALEX_NET_FULL_PATH = os.path.join(MODELS_DIR, "alex_net-full.pth")
 
 if not os.path.exists(MODELS_DIR):
     os.mkdir(MODELS_DIR)
@@ -86,9 +87,39 @@ if not os.path.exists(MODELS_DIR):
 # %%
 alex_net = None
 train_val_results = None
-if not os.path.exists(ALEX_NET_PATH):
+if not os.path.exists(ALEX_NET_TRAIN_VAL_PATH):
     alex_net = ax.AlexNet()
     train_val_results = alex_net.fit_and_validate(
+        train_data_loader=train_data_loader,
+        validation_data_loader=val_data_loader,
+        optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
+        epochs=1,
+        verbose=2
+    )
+
+    torch.save(alex_net, ALEX_NET_TRAIN_VAL_PATH)
+    ser.serialize(
+        filepath=ALEX_NET_TRAIN_VAL_RESULTS_PATH,
+        obj=train_val_results
+    )
+else:
+    alex_net = torch.load(ALEX_NET_TRAIN_VAL_PATH)
+    train_val_results = ser.deserialize(
+        type_=ax.TrainingValidationResults,
+        filepath=ALEX_NET_TRAIN_VAL_RESULTS_PATH,
+    )
+
+# %% [markdown]
+# ## Training Full Model
+
+# %%
+train_data_loader = data.DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=8)
+
+# %%
+alex_net_full = None
+if not os.path.exists(ALEX_NET_FULL_PATH):
+    alex_net_full = ax.AlexNet()
+    alex_net_full.fit(
         train_data_loader=train_data_loader,
         validation_data_loader=val_data_loader,
         optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
@@ -96,18 +127,9 @@ if not os.path.exists(ALEX_NET_PATH):
         verbose=2
     )
 
-    torch.save(alex_net.state_dict(), ALEX_NET_PATH)
-    ser.serialize(
-        filepath=ALEX_NET_RESULTS_PATH,
-        obj=train_val_results
-    )
+    torch.save(alex_net_full, ALEX_NET_FULL_PATH)
 else:
-    alex_net = ax.AlexNet()
-    alex_net = alex_net.load_state_dict(torch.load(ALEX_NET_PATH))
-    train_val_results = ser.deserialize(
-        type_=ax.TrainingValidationResults,
-        filepath=ALEX_NET_RESULTS_PATH,
-    )
+    alex_net_full = torch.load(ALEX_NET_FULL_PATH)
 
 
 # %% [markdown]
@@ -150,8 +172,8 @@ test_dataset.load()
 test_data_loader = data.DataLoader(dataset=test_dataset, batch_size=32, num_workers=4, pin_memory=True)
 
 # %%
-alex_net_accuracy, alex_net_preds, alex_net_correct_ids, alex_net_wrong_ids = test_results(data_loader=test_data_loader, model=alex_net)
-alex_net_accuracy, alex_net_preds, alex_net_correct_ids, alex_net_wrong_ids
+accuracy, preds, correct_img_ids, wrong_image_ids = test_results(data_loader=test_data_loader, model=alex_net_full)
+accuracy, preds, correct_img_ids, wrong_image_ids
 
 # %% [markdown]
 # ## Plots
@@ -159,7 +181,7 @@ alex_net_accuracy, alex_net_preds, alex_net_correct_ids, alex_net_wrong_ids
 # %%
 foml.plot_confusion_matrix(
     classes_mask=test_dataset.get_labels().numpy(), 
-    predictions=alex_net_preds.numpy(),
+    predictions=preds.numpy(),
     save_fig_path=os.path.join(foml.IMAGES_DIR, "alex-net-confusion-matrix.png")
 )
 
@@ -184,7 +206,7 @@ test_dataset_no_transforms.transform = None
 test_dataset_no_transforms.transforms = None
 
 # %%
-rnd_ids, _ = train_test_split(alex_net_correct_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[alex_net_correct_ids.to(torch.int)])
+rnd_ids, _ = train_test_split(correct_img_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[correct_img_ids.to(torch.int)])
 foml.plot_images(
     ids=rnd_ids, 
     dataset=test_dataset_no_transforms,
@@ -192,7 +214,7 @@ foml.plot_images(
 )
 
 # %%
-rnd_ids, _ = train_test_split(alex_net_wrong_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[alex_net_wrong_ids.to(torch.int)])
+rnd_ids, _ = train_test_split(wrong_image_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[wrong_image_ids.to(torch.int)])
 foml.plot_images(
     ids=rnd_ids, 
     dataset=test_dataset_no_transforms,
