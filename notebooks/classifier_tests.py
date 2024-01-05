@@ -14,6 +14,8 @@
 # ---
 
 # %%
+import os.path
+
 import numpy as np
 # %load_ext autoreload
 
@@ -22,7 +24,7 @@ import torch.utils.data as data
 import src.datasets.custom_coco_dataset as coco
 import src.ensemble_training.ada_boost as ada
 from src.classifiers import alex_net as ax
-from src.utils.constants import RND_SEED
+from src.utils.constants import RND_SEED, ROOT_COCO_DIR
 
 # %%
 torch.cuda.is_available()
@@ -166,8 +168,8 @@ labels_mask = alex_net_train_dataset.get_labels().cpu().detach().numpy()
 # %%
 train_split_idxs, val_split_idxs = train_test_split(
     np.arange(0, len(ada_boost_train_dataset)), 
-    train_size=5000, 
-    test_size=1000, 
+    train_size=110000, 
+    test_size=7500, 
     stratify=labels_mask, 
     random_state=RND_SEED
 )
@@ -175,39 +177,41 @@ alex_net_train_subset = data.Subset(alex_net_train_dataset, indices=train_split_
 ada_boost_train_subset = data.Subset(ada_boost_train_dataset, indices=train_split_idxs)
 val_subset = data.Subset(val_dataset, indices=val_split_idxs)
 
-alex_net_train_data_loader = data.DataLoader(alex_net_train_subset, batch_size=128, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=8)
-ada_boost_train_data_loader = data.DataLoader(ada_boost_train_subset, batch_size=128, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=8)
+alex_net_train_data_loader = data.DataLoader(alex_net_train_subset, batch_size=128, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=8)
+ada_boost_train_data_loader = data.DataLoader(ada_boost_train_subset, batch_size=64, shuffle=True, num_workers=4, pin_memory=True, prefetch_factor=4)
 val_data_loader = data.DataLoader(val_subset, batch_size=128, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=8)
 
 classes_mask = ada_boost_train_dataset.get_labels()
 _, class_cardinalities = torch.unique(classes_mask[train_split_idxs], sorted=True, return_counts=True)
 
-# %% is_executing=true
-ada_boost = ada.AdaBoost(n_classes=2) #device=torch.device("cpu"))
-strong_learner, train_val_results = ada_boost.fit_and_validate(
-    eras=15,
-    train_data_loader=ada_boost_train_data_loader,
-    validation_data_loader=val_data_loader,
-    classes_mask=classes_mask,
-    actual_train_dataset_length=len(ada_boost_train_dataset),
-    weak_learner_optimizer_builder=lambda params: torch.optim.Adam(params, lr=1e-3, weight_decay=1e-6),
-    weak_learner_epochs=10,
-    verbose=2,
-)
-
 # %% [raw]
-# alex_net = ax.AlexNet()
-# train_val_results = alex_net.fit_and_validate(
-#     train_data_loader=alex_net_train_data_loader, 
+# ada_boost = ada.AdaBoost(n_classes=2) #device=torch.device("cpu"))
+# strong_learner, train_val_results = ada_boost.fit_and_validate(
+#     eras=50,
+#     train_data_loader=ada_boost_train_data_loader,
 #     validation_data_loader=val_data_loader,
-#     optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
-#     epochs=200,
-#     verbose=2
+#     classes_mask=classes_mask,
+#     class_cardinalities=class_cardinalities,
+#     actual_train_dataset_length=len(ada_boost_train_dataset),
+#     #weak_learner_optimizer_builder=lambda params: torch.optim.SGD(params, lr=10000), # weight_decay=1e-6),
+#     weak_learner_optimizer_builder=lambda params: torch.optim.Adam(params, lr=9e-3), # weight_decay=1e-6),
+#     weak_learner_epochs=1,
+#     verbose=2,
 # )
 
 # %%
-import random
+alex_net = ax.AlexNet()
+train_val_results = alex_net.fit_and_validate(
+    train_data_loader=alex_net_train_data_loader, 
+    validation_data_loader=val_data_loader,
+    optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
+    epochs=200,
+    verbose=2
+)
 
+# %%
+
+# %%
 import skimage.io as io
 from typing import Callable, Tuple
 from datasets.custom_coco_dataset import BatchType
@@ -217,31 +221,62 @@ from tqdm import tqdm
 def test_results(
         data_loader: torch.utils.data.DataLoader, 
         model: Callable[[torch.Tensor], torch.Tensor]
-) -> Tuple[float, np.ndarray, np.ndarray]:
+) -> Tuple[float, torch.Tensor, torch.Tensor, torch.Tensor]:
     accuracy = .0
 
     correct_ids = torch.tensor([])
     wrong_ids = torch.tensor([])
+    predictions = torch.tensor([])
     for batch in tqdm(data_loader):
         batch: BatchType
         ids, x_batch, y_batch, _ = batch
         x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
 
-        predictions: torch.Tensor = model(x_batch)
+        y_preds: torch.Tensor = model.predict(x_batch)
 
+        # print(y_batch)
+        # print(predictions)
+        
         # noinspection PyUnresolvedReferences
-        correctness_mask = (predictions == y_batch).cpu()
-        ids = ids.cpu()
-        correct_ids = torch.cat(correct_ids, ids[correctness_mask])
-        wrong_ids = torch.cat(wrong_ids, ids[~correctness_mask])
+        correctness_mask = (y_preds == y_batch).cpu()
+        ids = ids.cpu().to(torch.int)
+        correct_ids = torch.cat((correct_ids, ids[correctness_mask]))
+        wrong_ids = torch.cat((wrong_ids, ids[~correctness_mask]))
+        predictions = torch.cat((predictions, y_preds.cpu()))
         
         accuracy += correctness_mask.sum().item() / len(data_loader.dataset)
-    return accuracy, correct_ids, wrong_ids
+    return accuracy, predictions, correct_ids, wrong_ids
 
 
 
 # %%
-test_results(data_loader=val_data_loader, model=strong_learner[0])
+test_dataset = coco.COCO_TEST_DATASET
+test_dataset.load()
+
+# %%
+test_data_loader = data.DataLoader(dataset=test_dataset, batch_size=32, num_workers=4, pin_memory=True)
+
+# %%
+import os
+from src.utils.constants import RND_SEED, ROOT_COCO_DIR
+import src.utils.serialization as ser
+
+MODELS_DIR = os.path.join(ROOT_COCO_DIR, "models")
+ALEX_NET_PATH = os.path.join(MODELS_DIR, "alex_net.torch")
+ALEX_NET_RESULTS_PATH = os.path.join(MODELS_DIR, "alex_net_results.ser")
+ADA_BOOST_PATH = os.path.join(MODELS_DIR, "ada_boost.torch")
+if not os.path.exists(MODELS_DIR):
+    os.mkdir(MODELS_DIR)
+    
+torch.save(alex_net.state_dict(), ALEX_NET_PATH)
+ser.serialize(
+    filepath=ALEX_NET_RESULTS_PATH,
+    obj=train_val_results
+)
+
+# %%
+alex_net_accuracy, alex_net_preds, alex_net_correct_ids, alex_net_wrong_ids = test_results(data_loader=test_data_loader, model=alex_net)
+alex_net_accuracy, alex_net_preds, alex_net_correct_ids, alex_net_wrong_ids
 
 # %%
 
@@ -249,20 +284,49 @@ test_results(data_loader=val_data_loader, model=strong_learner[0])
 # ## Plotting Stuff TODO
 
 # %%
+alex_net_train_results = ser.deserialize_or_save_object(
+    type_=ax.TrainingValidationResults,
+    filepath=ALEX_NET_RESULTS_PATH,
+    builder=lambda: train_val_results,
+)
+
+# %%
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import src.visualization.classification as vis
+
+
+IMAGES_DIR = os.path.join(ROOT_COCO_DIR, "..", "images")
+if not os.path.exists(IMAGES_DIR):
+    os.mkdir(IMAGES_DIR)
+
+def plot_confusion_matrix(
+        classes_mask: np.ndarray, 
+        predictions: np.ndarray,
+        save_fig_path: str | os.PathLike,
+):
+    fig = vis.confusion_matrix(
+        y_true=classes_mask,
+        y_pred=predictions,
+        figsize=(12,12)
+    )
+    fig.savefig(save_fig_path)
+
 
 # Sample data (replace this with your actual training and validation errors)
 # epochs = [1, 2, 3, 4, 5]  # X-axis values (e.g., epochs)
 # training_errors = [0.5, 0.4, 0.3, 0.2, 0.1]  # Training errors for each epoch
 # validation_errors = [0.6, 0.5, 0.4, 0.3, 0.2]  # Validation errors for each epoch
 
+
 def train_validation_scores_lineplot(
         training_scores: np.ndarray,
         validation_scores: np.ndarray,
+        save_fig_path: str | os.PathLike,
         training_line_title = "Training",
         validation_line_title = "Validation",
+        y_axis_title = "Loss",
 ):
     assert len(training_scores) == len(validation_scores), "Train and Val scores must have same length"
     epochs = list(range(len(training_scores)))
@@ -276,11 +340,11 @@ def train_validation_scores_lineplot(
     sns.set(style='whitegrid')
 
     # Plotting both lines on the same plot
-    sns.lineplot(x='Epochs', y='Error', hue='Title', data=df, marker='o')
+    sns_plot = sns.lineplot(x='Epochs', y='Error', hue='Title', data=df, marker='o')
 
     # Adding labels and title
     plt.xlabel('Epochs')
-    plt.ylabel('Error')
+    plt.ylabel(y_axis_title)
     plt.title('Training and Validation Scores Over Epochs')
 
     # Adding a legend
@@ -288,19 +352,80 @@ def train_validation_scores_lineplot(
 
     # Display the plot
     plt.show()
+    
+    fig = sns_plot.get_figure()
+    fig.savefig(save_fig_path)
 
 
-def plot_images(ids, dataset: coco.CocoDataset):
+def plot_images(
+        ids, 
+        dataset: coco.CocoDataset,         
+        save_fig_dir: str | os.PathLike,
+):
     """
     Useful to plot correct and wrong instances
     """
+    
+    if not os.path.exists(save_fig_dir):
+        os.mkdir(save_fig_dir)
+    
     for img_id in ids:
         batch: coco.ItemType = dataset[img_id]
         _, img, label, weight = batch
-        I = io.imread(img.permute(1, 2, 0))
-        print(type(I))
+        # I = io.imread(img.permute(1, 2, 0))
+        # print(type(I))
 
         plt.axis('off')
-        plt.imshow(I)
+        plt.imshow(img.permute(1, 2, 0))
+        plt.title(f"Class: {label}")
         plt.show()
+        plt.savefig(os.path.join(save_fig_dir, f"img_{img_id}.png"))
 
+
+# %%
+plot_confusion_matrix(
+    classes_mask=test_dataset.get_labels().numpy(), 
+    predictions=alex_net_preds.numpy(),
+    save_fig_path=os.path.join(IMAGES_DIR, "alex-net-confusion-matrix.png")
+)
+
+# %%
+train_validation_scores_lineplot(
+    training_scores=alex_net_train_results.avg_train_loss,
+    validation_scores=alex_net_train_results.avg_validation_loss,
+    save_fig_path=os.path.join(IMAGES_DIR, "alex-net-train-val-loss.png")
+)
+
+# %%
+train_validation_scores_lineplot(
+    training_scores=alex_net_train_results.train_accuracy,
+    validation_scores=alex_net_train_results.validation_accuracy,
+    y_axis_title="Accuracy",
+    save_fig_path=os.path.join(IMAGES_DIR, "alex-net-train-val-accuracy.png")
+)
+
+# %%
+# test_dataset_no_transforms =  
+
+# %%
+test_dataset_no_transforms = deepcopy(test_dataset)
+test_dataset_no_transforms.transform = None
+test_dataset_no_transforms.transforms = None
+
+# %%
+rnd_ids, _ = train_test_split(alex_net_correct_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[alex_net_correct_ids.to(torch.int)])
+plot_images(
+    ids=rnd_ids, 
+    dataset=test_dataset_no_transforms,
+    save_fig_dir=os.path.join(IMAGES_DIR, "alex-net-correct")
+)
+
+# %%
+rnd_ids, _ = train_test_split(alex_net_wrong_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[alex_net_wrong_ids.to(torch.int)])
+plot_images(
+    ids=rnd_ids, 
+    dataset=test_dataset_no_transforms,
+    save_fig_dir=os.path.join(IMAGES_DIR, "alex-net-wrong")
+)
+
+# %%
