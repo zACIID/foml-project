@@ -70,7 +70,7 @@ train_subset = data.Subset(train_dataset, indices=train_split_idxs)
 val_subset = data.Subset(val_dataset, indices=val_split_idxs)
 
 train_data_loader = data.DataLoader(train_subset, batch_size=128, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=8)
-val_data_loader = data.DataLoader(val_subset, batch_size=128, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=8)
+val_data_loader = data.DataLoader(val_subset, batch_size=128, shuffle=True, num_workers=8, pin_memory=True, prefetch_factor=4)
 
 classes_mask = train_dataset.get_labels()
 _, class_cardinalities = torch.unique(classes_mask[train_split_idxs], sorted=True, return_counts=True)
@@ -93,7 +93,7 @@ if not os.path.exists(ALEX_NET_TRAIN_VAL_PATH):
         train_data_loader=train_data_loader,
         validation_data_loader=val_data_loader,
         optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
-        epochs=1,
+        epochs=100,
         verbose=2
     )
 
@@ -120,10 +120,9 @@ alex_net_full = None
 if not os.path.exists(ALEX_NET_FULL_PATH):
     alex_net_full = ax.AlexNet()
     alex_net_full.fit(
-        train_data_loader=train_data_loader,
-        validation_data_loader=val_data_loader,
+        data_loader=train_data_loader,
         optimizer=torch.optim.Adam(alex_net.parameters(), lr=8e-5, weight_decay=1e-6),
-        epochs=100,
+        epochs=50,
         verbose=2
     )
 
