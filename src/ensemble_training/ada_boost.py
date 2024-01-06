@@ -1,6 +1,7 @@
 import dataclasses
-from typing import List, Sequence, Tuple, Callable, Iterator
+from typing import List, Tuple, Callable, Iterator
 
+import numpy as np
 import torch
 from torch import Tensor, sum
 from torch.utils.data import DataLoader
@@ -10,7 +11,7 @@ from classifiers.simple_learner import WeakLearnerValidationResults, WeakLearner
 from loss_functions.base_weighted_loss import WeightedBaseLoss
 from src.classifiers.strong_learner import StrongLearner
 from src.classifiers.weak_learner import WeakLearner
-from src.datasets.custom_coco_dataset import ItemType, BatchType
+from src.datasets.custom_coco_dataset import ItemType, BatchType, Labels
 
 
 @dataclasses.dataclass
@@ -61,12 +62,20 @@ class AdaBoost:
             verbose: int = 0,
     ) -> Tuple[StrongLearner, StrongLearnerTrainingResults]:
         self._weights = _initialize_weights(
-            actual_train_dataset_length=actual_train_dataset_length,
+            classes_mask=classes_mask,
+            total_train_dataset_length=actual_train_dataset_length,
             device=self._device
         )
 
         strong_learner_results = StrongLearnerTrainingResults()
         for era in range(eras):
+            # self._weights = _normalize_weights(
+            #     weights=self._weights,
+            #     device=self._device,
+            #     actual_train_ids=actual_train_ids,
+            #     add_noise=False#True
+            # )
+            # TODO implement if works
             weak_learner: WeakLearner = WeakLearner(
                 weights=self._weights,
                 device=self._device
@@ -91,7 +100,7 @@ class AdaBoost:
             strong_learner_results.weak_learner_results.append(res)
 
             strong_learner = StrongLearner(weak_learners=self._weak_learners, device=self._device)
-            accuracy = _test_results(data_loader=data_loader, model=strong_learner)
+            accuracy = _testing_results(data_loader=data_loader, model=strong_learner)
             strong_learner_results.train_accuracy.append(accuracy)
 
             if verbose > 1:
@@ -106,21 +115,33 @@ class AdaBoost:
             train_data_loader: DataLoader[ItemType],
             validation_data_loader: DataLoader[ItemType],
             classes_mask: Tensor,
-            actual_train_dataset_length: int,
+            actual_train_ids: np.ndarray,
+            total_train_dataset_length: int,
             weak_learner_optimizer_builder: Callable[[Iterator[torch.nn.Parameter]], torch.optim.Optimizer],
             weak_learner_loss: WeightedBaseLoss = None,
             weak_learner_epochs: int = 5,
             verbose: int = 0,
     ) -> Tuple[StrongLearner, StrongLearnerValidationResults]:
         self._weights = _initialize_weights(
-            actual_train_dataset_length=actual_train_dataset_length,
+            classes_mask=classes_mask,
+            actual_train_ids=actual_train_ids,
+            total_train_dataset_length=total_train_dataset_length,
             device=self._device
         )
 
+        prev_learner_weights_map = torch.ones(self._weights.shape, dtype=torch.bool, device=self._device)
         strong_learner_results = StrongLearnerValidationResults()
         for era in range(eras):
-            weak_learner: WeakLearner = WeakLearner(
+            self._weights = _normalize_weights(
                 weights=self._weights,
+                device=self._device,
+                actual_train_ids=actual_train_ids,
+                add_noise=False
+            )
+            weak_learner: WeakLearner = WeakLearner(
+                # Copy tensors because preds are freed when loss.backward() is executed
+                # See https://discuss.pytorch.org/t/trying-to-backward-through-the-graph-a-second-time-or-directly-access-saved-tensors-after-they-have-already-been-freed/176686
+                weights=self._weights.clone(),
                 device=self._device
             )
 
@@ -134,25 +155,31 @@ class AdaBoost:
                 verbose=verbose
             )
 
+            if weak_learner.get_error_rate() >= 0.5:
+                print(f"\033[35mSkipping WeakLearner\033[0m")
+                continue
+
             _update_weights_(
                 weights=self._weights,
                 weak_learner_beta=weak_learner.get_beta(),
-                weak_learner_weights_map=weak_learner.get_weights_map()
+                weak_learner_weights_map=weak_learner.get_weights_map() & prev_learner_weights_map
             )
+            prev_learner_weights_map = weak_learner.get_weights_map()
 
             self._weak_learners.append(weak_learner)
             strong_learner_results.weak_learner_results.append(res)
 
             strong_learner = StrongLearner(weak_learners=self._weak_learners, device=self._device)
-            train_accuracy = _test_results(data_loader=train_data_loader, model=strong_learner)
-            val_accuracy = _test_results(data_loader=validation_data_loader, model=strong_learner)
+            train_accuracy = _testing_results(data_loader=train_data_loader, model=strong_learner)
+            val_accuracy = _testing_results(data_loader=validation_data_loader, model=strong_learner)
             strong_learner_results.train_accuracy.append(train_accuracy)
             strong_learner_results.val_accuracy.append(val_accuracy)
 
             if verbose > 1:
-                print(f"StrongLearner train accuracy: {train_accuracy}")
-                print(f"StrongLearner validation accuracy: {val_accuracy}")
-                print(f"Eras left: {eras - (era + 1)}")
+                print(f"\033[34mSimpleLearner beta: {weak_learner.get_beta()}\033[0m")
+                print(f"\033[35mStrongLearner train accuracy: {train_accuracy}\033[0m")
+                print(f"\033[35mStrongLearner validation accuracy: {val_accuracy}\033[0m")
+                print(f"\033[35mEras left: {eras - (era + 1)}\033[0m")
 
         return StrongLearner(weak_learners=self._weak_learners, device=self._device), strong_learner_results
 
@@ -161,7 +188,9 @@ class AdaBoost:
 
 
 def _initialize_weights(
-        actual_train_dataset_length: int,
+        classes_mask: Tensor,
+        total_train_dataset_length: int,
+        actual_train_ids: np.ndarray,
         device: torch.device
 ) -> Tensor:
     # NOTE: since the dataset used may be a torch.utils.data.Subset,
@@ -173,12 +202,34 @@ def _initialize_weights(
     #   length of the dataset, so that the indices returned by the dataloader can be used.
     #  Even if this results in space being wasted, that's fine
     #   (unless the vector becomes so big it is unusable)
-    weights = torch.ones(actual_train_dataset_length, device=device)
+    weights: Tensor = torch.zeros(total_train_dataset_length, device=device)
+
+    _, class_cardinalities = torch.unique(classes_mask[actual_train_ids], return_counts=True)
+    for lbl in Labels:
+        cardinality = class_cardinalities[lbl]
+        weights[classes_mask == int(lbl)] = 1 / (2 * cardinality)
+
     return weights
 
 
-def _normalize_weights(weights: Tensor) -> Tensor:
-    return weights / sum(weights)
+def _normalize_weights(
+        weights: Tensor,
+        actual_train_ids: np.ndarray,
+        device: torch.device,
+        add_noise: bool = False
+) -> Tensor:
+    if add_noise:
+        noise = torch.rand(actual_train_ids.shape[0], device=device)
+        norm_noise = noise / sum(noise)
+    else:
+        norm_noise = torch.zeros(actual_train_ids.shape, device=device)
+
+    # Normalize by the sum of the actual ids used for training,
+    #   so that such ids sum up to 1 and not less in the case the sum of all weights is used
+    weights = weights / sum(weights[actual_train_ids])
+    weights[actual_train_ids] += norm_noise
+    weights = weights / sum(weights[actual_train_ids])
+    return weights
 
 
 def _update_weights_(
@@ -192,7 +243,8 @@ def _update_weights_(
     #   https://stackoverflow.com/questions/73616963/runtimeerror-a-view-of-a-leaf-variable-that-requires-grad-is-being-used-in-an
     weights.data[weak_learner_weights_map] *= weak_learner_beta
 
-def _test_results(
+
+def _testing_results(
         data_loader: torch.utils.data.DataLoader[ItemType],
         model: StrongLearner
 ):

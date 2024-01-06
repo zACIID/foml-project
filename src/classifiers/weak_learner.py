@@ -16,7 +16,7 @@ class WeakLearner:
             weights: Tensor,
             k_classes: int = 2,
             device: torch.device = None
-        ):
+    ):
         """
         :param weights: AdaBoost weights - vector of dataset length that weighs the loss of each instance
         """
@@ -127,16 +127,29 @@ class WeakLearner:
             classes_mask: Tensor,
     ):
         # sigmoid used to make sure that the error rate is a number \in [0, 1]
-        def sigmoid(x):
-            return 1 / (1 + math.exp(-x))
 
+        # TODO(pierluigi): old approach
+        # def sigmoid(x):
+        #     return 1 / (1 + math.exp(-x))
+        #
         # Take loss related just to last epoch,
         #   because we need to use it with the prediction map from only the last epoch
         # Also, just take avg loss instead of cumulative because loss is unbounded,
         #   which saturates the sigmoid
-        last_epoch_avg_loss = training_results.avg_train_loss[-1]
-        self._error_rate = last_epoch_avg_loss
-        self._beta = min(sigmoid(self._error_rate), 0.9)
+        # last_epoch_avg_loss = training_results.avg_train_loss[-1]
+        # self._error_rate = last_epoch_avg_loss
+        # self._beta = min(sigmoid(self._error_rate), 0.9)
+
+        preds, pred_ids = training_results.last_epoch_prediction_map
+        pred_ids = pred_ids.to(torch.int)
+        error_mask = (torch.argmax(preds, dim=1) != classes_mask[pred_ids])
+
+        # TODO see if this works
+        # Weighted misclassification (0-1) loss
+        self._error_rate = (self._weights[pred_ids])[error_mask].sum().item()
+        print(f"ERROR RATE DEBUG: {self._error_rate}")  # TODO debug
+        print(f"ERROR CLASSES: {torch.unique(classes_mask[pred_ids][error_mask], return_counts=True)}")
+        self._beta = self._error_rate / (1 - self._error_rate) if self._error_rate < 0.5 else 0.99
 
         self._update_weights_map(classes_mask=classes_mask, data=training_results.last_epoch_prediction_map)
 
