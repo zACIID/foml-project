@@ -71,8 +71,10 @@ class AlexNet(nn.Module):
                 ('avgpool1', nn.AdaptiveAvgPool2d((6, 6))),
                 ('flatten1', nn.Flatten()),
                 ('dense1', nn.Linear(in_features=256*6*6, out_features=4096)),
+                ('act_fun6', act_fun()),
                 ('dropout1', nn.Dropout(p=0.5)),
                 ('dense2', nn.Linear(in_features=4096, out_features=4096)),
+                ('act_fun7', act_fun()),
                 ('dropout2', nn.Dropout(p=0.5)),
                 ('dense3', nn.Linear(in_features=4096, out_features=k_classes)),
             ])
