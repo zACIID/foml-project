@@ -69,19 +69,19 @@ labels_mask = train_dataset.get_labels().cpu().detach().numpy()
 # %%
 train_split_idxs, val_split_idxs = train_test_split(
     np.arange(0, len(train_dataset)),
-    train_size=10,#0.8,
-    test_size=2,
+    train_size=9000,#0.8,
+    test_size=500,
     stratify=labels_mask,
     random_state=RND_SEED
 )
 train_subset = data.Subset(train_dataset, indices=train_split_idxs)
 val_subset = data.Subset(val_dataset, indices=val_split_idxs)
 
-train_data_loader = data.DataLoader(train_subset, batch_size=64, shuffle=True, num_workers=4, pin_memory=True, prefetch_factor=4)
-val_data_loader = data.DataLoader(val_subset, batch_size=128, shuffle=True, num_workers=12, pin_memory=True, prefetch_factor=8)
+train_data_loader = data.DataLoader(train_subset, batch_size=128, shuffle=True, num_workers=4, pin_memory=True, prefetch_factor=4)
+val_data_loader = data.DataLoader(val_subset, batch_size=128, shuffle=True, num_workers=4, pin_memory=True, prefetch_factor=1)
 
 classes_mask = train_dataset.get_labels()
-_, class_cardinalities = torch.unique(classes_mask[train_split_idxs], sorted=True, return_counts=True)
+_, train_split_class_cardinalities = torch.unique(classes_mask[train_split_idxs], sorted=True, return_counts=True)
 
 # %%
 MODELS_DIR = os.path.join(ROOT_COCO_DIR, "models")
@@ -102,11 +102,11 @@ if not os.path.exists(ADA_BOOST_TRAIN_VAL_PATH):
         train_data_loader=train_data_loader,
         validation_data_loader=val_data_loader,
         classes_mask=classes_mask,
-        class_cardinalities=class_cardinalities,
-        actual_train_dataset_length=len(train_dataset),
+        actual_train_ids=train_split_idxs,
+        total_train_dataset_length=len(train_dataset),
         #weak_learner_optimizer_builder=lambda params: torch.optim.SGD(params, lr=10000), # weight_decay=1e-6),
-        weak_learner_optimizer_builder=lambda params: torch.optim.Adam(params, lr=9e-3), # weight_decay=1e-6),
-        weak_learner_epochs=1,
+        weak_learner_optimizer_builder=lambda params: torch.optim.Adam(params, lr=9e-3),#, weight_decay=1e-6),
+        weak_learner_epochs=12,
         verbose=2,
     )
 
@@ -154,7 +154,7 @@ else:
 # %% [markdown]
 # ## Test Dataset Results
 
-# %% is_executing=true
+# %%
 def test_results(
         data_loader: torch.utils.data.DataLoader,
         model: strong.StrongLearner
@@ -183,35 +183,35 @@ def test_results(
         
     return accuracy, predictions, correct_ids, wrong_ids
 
-# %% is_executing=true
+# %%
 test_dataset = coco.COCO_TEST_DATASET
 test_dataset.load()
 
-# %% is_executing=true
+# %%
 test_data_loader = data.DataLoader(dataset=test_dataset, batch_size=32, num_workers=4, pin_memory=True)
 
-# %% is_executing=true
+# %%
 accuracy, preds, correct_img_ids, wrong_image_ids = test_results(data_loader=test_data_loader, model=strong_learner_val)
 accuracy, preds, correct_img_ids, wrong_image_ids
 
 # %% [markdown]
 # ## Plots
 
-# %% is_executing=true
+# %%
 foml.plot_confusion_matrix(
     classes_mask=test_dataset.get_labels().numpy(), 
     predictions=preds.numpy(),
     save_fig_path=os.path.join(foml.IMAGES_DIR, "ada-boost-confusion-matrix.png")
 )
 
-# %% is_executing=true
+# %%
 foml.train_validation_scores_lineplot(
     training_scores=train_val_results.avg_train_loss,
     validation_scores=train_val_results.avg_validation_loss,
     save_fig_path=os.path.join(foml.IMAGES_DIR, "ada-boost-train-val-loss.png")
 )
 
-# %% is_executing=true
+# %%
 foml.train_validation_scores_lineplot(
     training_scores=train_val_results.train_accuracy,
     validation_scores=train_val_results.validation_accuracy,
@@ -219,12 +219,12 @@ foml.train_validation_scores_lineplot(
     save_fig_path=os.path.join(foml.IMAGES_DIR, "ada-boost-train-val-accuracy.png")
 )
 
-# %% is_executing=true
+# %%
 test_dataset_no_transforms = deepcopy(test_dataset)
 test_dataset_no_transforms.transform = None
 test_dataset_no_transforms.transforms = None
 
-# %% is_executing=true
+# %%
 rnd_ids, _ = train_test_split(correct_img_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[correct_img_ids.to(torch.int)])
 foml.plot_images(
     ids=rnd_ids, 
@@ -232,7 +232,7 @@ foml.plot_images(
     save_fig_dir=os.path.join(foml.IMAGES_DIR, "ada-boost-correct")
 )
 
-# %% is_executing=true
+# %%
 rnd_ids, _ = train_test_split(wrong_image_ids.to(torch.int).numpy(), train_size=10, test_size=5, stratify=test_dataset_no_transforms.get_labels()[wrong_image_ids.to(torch.int)])
 foml.plot_images(
     ids=rnd_ids, 
@@ -240,4 +240,4 @@ foml.plot_images(
     save_fig_dir=os.path.join(foml.IMAGES_DIR, "ada-boost-wrong")
 )
 
-# %% is_executing=true
+# %%
