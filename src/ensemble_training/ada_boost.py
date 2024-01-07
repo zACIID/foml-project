@@ -157,16 +157,16 @@ class AdaBoost:
 
             if weak_learner.get_error_rate() >= 0.5:
                 print(f"\033[35mSkipping WeakLearner\033[0m")
-                continue
+            else:
+                _update_weights_(
+                    weights=self._weights,
+                    weak_learner_beta=weak_learner.get_beta(),
+                    weak_learner_weights_map=weak_learner.get_weights_map() & prev_learner_weights_map
+                )
+                prev_learner_weights_map = weak_learner.get_weights_map()
 
-            _update_weights_(
-                weights=self._weights,
-                weak_learner_beta=weak_learner.get_beta(),
-                weak_learner_weights_map=weak_learner.get_weights_map() & prev_learner_weights_map
-            )
-            prev_learner_weights_map = weak_learner.get_weights_map()
+                self._weak_learners.append(weak_learner)
 
-            self._weak_learners.append(weak_learner)
             strong_learner_results.weak_learner_results.append(res)
 
             strong_learner = StrongLearner(weak_learners=self._weak_learners, device=self._device)
