@@ -91,5 +91,5 @@ def plot_images(
         plt.axis('off')
         plt.imshow(img.permute(1, 2, 0))
         plt.title(f"Class: {label}")
-        plt.show()
         plt.savefig(os.path.join(save_fig_dir, f"img_{img_id}.png"))
+        plt.show()
